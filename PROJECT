@@ -1,0 +1,6 @@
+domain: nais.io
+layout:
+- go.kubebuilder.io/v3
+projectName: bqrator
+repo: nais/bqrator
+version: "3"
