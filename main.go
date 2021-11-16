@@ -17,11 +17,14 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
+	"nais/bqrator/controllers"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"cloud.google.com/go/bigquery"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	naisiov1beta1 "nais/bqrator/api/v1beta1"
-	"nais/bqrator/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -78,10 +80,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.BigQueryDatasetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	bqClient, err := bigquery.NewClient(context.Background(), "")
+	if err != nil {
+		setupLog.Error(err, "unable to create bigquery client")
+		os.Exit(1)
+	}
+
+	bqMgr := controllers.NewBigQueryDatasetReconciler(mgr.GetClient(), mgr.GetScheme(), bqClient)
+	if err = bqMgr.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BigQueryDataset")
 		os.Exit(1)
 	}

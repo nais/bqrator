@@ -3,4 +3,11 @@ kind: BigQueryDataset
 metadata:
   name: bigquerydataset-sample
 spec:
-  # TODO(user): Add fields here
+  name: bqrater_test_set
+  description: "Supert datasett som har data fra tidenes morgen"
+  location: europe-north1
+  access:
+    - role: READER
+      userByEmail: frode.sundby@nav.no
+  project: nada-dev-db2e
+  cascadingDelete: true
