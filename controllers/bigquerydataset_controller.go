@@ -65,7 +65,9 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	var dataset naisiov1beta1.BigQueryDataset
 	if err := r.Get(ctx, req.NamespacedName, &dataset); err != nil {
-		log.Error(err, "unable to fetch BigQueryDataset")
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch BigQueryDataset")
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -76,6 +78,7 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Error(err, "unable to compute hash")
 		return ctrl.Result{}, err
 	}
+	bqClient := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name)
 
 	if dataset.DeletionTimestamp.IsZero() {
 		// Update operation
@@ -121,8 +124,46 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 		} else {
 			if currentHash != dataset.Status.SynchronizationHash {
-				// Update dataset
-				log.Info("Do some updating")
+				existing, err := bqClient.Metadata(ctx)
+				if err != nil {
+					log.Error(err, "Unable to fetch existing dataset")
+				}
+				var accessList []*bigquery.AccessEntry
+				for _, member := range dataset.Spec.Access {
+					accessList = append(accessList, &bigquery.AccessEntry{
+						Role:       bigquery.AccessRole(member.Role),
+						EntityType: bigquery.UserEmailEntity,
+						Entity:     member.UserByEmail,
+					})
+				}
+				for _, existingMember := range existing.Access {
+					found := false
+					for _, member := range accessList {
+						if existingMember.Entity == member.Entity {
+							found = true
+							break
+						}
+					}
+					if !found {
+						accessList = append(accessList, existingMember)
+					}
+				}
+				_, err = bqClient.Update(ctx, bigquery.DatasetMetadataToUpdate{
+					Name:        dataset.Spec.Name,
+					Description: dataset.Spec.Description,
+					Access:      accessList,
+				}, existing.ETag)
+				if err != nil {
+					log.Error(err, "unable to update dataset")
+					return ctrl.Result{}, err
+				}
+				dataset.Status.LastModifiedTime = int(time.Now().Unix())
+				dataset.Status.Status = "READY"
+				dataset.Status.SynchronizationHash = currentHash
+				if err := r.Status().Update(ctx, &dataset); err != nil {
+					log.Error(err, "unable to update status")
+					return ctrl.Result{}, err
+				}
 			}
 		}
 
@@ -130,8 +171,15 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// DELETE if finalizer is not present
 		if contains(dataset.Finalizers, finalizer) {
 			log.Info("Deleting BigQueryDataset", "name", dataset.Name)
-
-			// TODO(thokra): Delete the dataset from BigQuery using the API.
+			if dataset.Spec.CascadingDelete {
+				if err := bqClient.Delete(ctx); err != nil {
+					dataset.Status.Status = "ERROR"
+					if err := r.Status().Update(ctx, &dataset); err != nil {
+						log.Error(err, "unable to delete dataset")
+						return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+					}
+				}
+			}
 
 			controllerutil.RemoveFinalizer(&dataset, finalizer)
 			if err := r.Update(ctx, &dataset); err != nil {
