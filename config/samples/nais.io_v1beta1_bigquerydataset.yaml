@@ -1,0 +1,6 @@
+apiVersion: nais.io.nais.io/v1beta1
+kind: BigQueryDataset
+metadata:
+  name: bigquerydataset-sample
+spec:
+  # TODO(user): Add fields here

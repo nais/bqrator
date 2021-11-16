@@ -1,0 +1,34 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - nais.io.nais.io
+  resources:
+  - bigquerydatasets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - nais.io.nais.io
+  resources:
+  - bigquerydatasets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - nais.io.nais.io
+  resources:
+  - bigquerydatasets/status
+  verbs:
+  - get
+  - patch
+  - update
