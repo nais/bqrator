@@ -47,19 +47,19 @@ func NewBigQueryDatasetReconciler(client client.Client, scheme *runtime.Scheme, 
 	}
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *BigQueryDatasetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&naisiov1beta1.BigQueryDataset{}).
+		Complete(r)
+}
+
 //+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the BigQueryDataset object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
@@ -73,135 +73,156 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	log.Info("Reconciling BigQueryDataset", "name", dataset.Name)
 
-	currentHash, err := dataset.Hash()
-	if err != nil {
-		log.Error(err, "unable to compute hash")
-		return ctrl.Result{}, err
+	if !dataset.DeletionTimestamp.IsZero() {
+		return r.onDelete(ctx, dataset)
 	}
-	bqClient := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name)
 
-	if dataset.DeletionTimestamp.IsZero() {
-		// Update operation
-		if !contains(dataset.Finalizers, finalizer) {
-			controllerutil.AddFinalizer(&dataset, finalizer)
-			if err := r.Update(ctx, &dataset); err != nil {
-				log.Error(err, "unable to add finalizer")
-				return ctrl.Result{}, err
-			}
-		}
-
-		if dataset.Status.CreationTime == 0 {
-			var access []*bigquery.AccessEntry
-
-			for _, member := range dataset.Spec.Access {
-				// Add the operator user as owner by default
-				access = append(access, &bigquery.AccessEntry{
-					Role:       bigquery.AccessRole(member.Role),
-					Entity:     member.UserByEmail,
-					EntityType: bigquery.UserEmailEntity,
-				})
-			}
-
-			// TODO(thokra): Fields are optional, but we expect correct values as of now.
-			err := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name).Create(ctx, &bigquery.DatasetMetadata{
-				Name:        dataset.Spec.Name,
-				Location:    dataset.Spec.Location,
-				Description: dataset.Spec.Description,
-				Access:      access,
-			})
-			if err != nil {
-				log.Error(err, "unable to create dataset")
-				return ctrl.Result{}, err
-			}
-
-			dataset.Status.CreationTime = int(time.Now().Unix())
-			dataset.Status.LastModifiedTime = dataset.Status.CreationTime
-			dataset.Status.Status = "READY"
-			dataset.Status.SynchronizationHash = currentHash
-			if err := r.Status().Update(ctx, &dataset); err != nil {
-				log.Error(err, "unable to update status")
-				return ctrl.Result{}, err
-			}
-		} else {
-			if currentHash != dataset.Status.SynchronizationHash {
-				existing, err := bqClient.Metadata(ctx)
-				if err != nil {
-					log.Error(err, "Unable to fetch existing dataset")
-				}
-				var accessList []*bigquery.AccessEntry
-				for _, member := range dataset.Spec.Access {
-					accessList = append(accessList, &bigquery.AccessEntry{
-						Role:       bigquery.AccessRole(member.Role),
-						EntityType: bigquery.UserEmailEntity,
-						Entity:     member.UserByEmail,
-					})
-				}
-				for _, existingMember := range existing.Access {
-					found := false
-					for _, member := range accessList {
-						if existingMember.Entity == member.Entity {
-							found = true
-							break
-						}
-					}
-					if !found {
-						accessList = append(accessList, existingMember)
-					}
-				}
-				_, err = bqClient.Update(ctx, bigquery.DatasetMetadataToUpdate{
-					Name:        dataset.Spec.Name,
-					Description: dataset.Spec.Description,
-					Access:      accessList,
-				}, existing.ETag)
-				if err != nil {
-					log.Error(err, "unable to update dataset")
-					return ctrl.Result{}, err
-				}
-				dataset.Status.LastModifiedTime = int(time.Now().Unix())
-				dataset.Status.Status = "READY"
-				dataset.Status.SynchronizationHash = currentHash
-				if err := r.Status().Update(ctx, &dataset); err != nil {
-					log.Error(err, "unable to update status")
-					return ctrl.Result{}, err
-				}
-			}
-		}
-
-	} else {
-		// DELETE if finalizer is not present
-		if contains(dataset.Finalizers, finalizer) {
-			log.Info("Deleting BigQueryDataset", "name", dataset.Name)
-			if dataset.Spec.CascadingDelete {
-				if err := bqClient.Delete(ctx); err != nil {
-					dataset.Status.Status = "ERROR"
-					if err := r.Status().Update(ctx, &dataset); err != nil {
-						log.Error(err, "unable to delete dataset")
-						return ctrl.Result{RequeueAfter: 10 * time.Second}, err
-					}
-				}
-			}
-
-			controllerutil.RemoveFinalizer(&dataset, finalizer)
-			if err := r.Update(ctx, &dataset); err != nil {
-				log.Error(err, "unable to update BigQueryDataset")
-				return ctrl.Result{}, err
-			}
-		} else {
-			if err := r.Delete(ctx, &dataset); err != nil {
-				log.Error(err, "unable to delete BigQueryDataset")
-				return ctrl.Result{}, err
-			}
-			log.Info("Deleted BigQueryDataset", "name", dataset.Name)
-		}
+	if err := r.createOrUpdate(ctx, dataset); err != nil {
+		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *BigQueryDatasetReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&naisiov1beta1.BigQueryDataset{}).
-		Complete(r)
+func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset) error {
+	log := log.FromContext(ctx)
+	currentHash, err := dataset.Hash()
+	if err != nil {
+		log.Error(err, "unable to compute hash")
+		return err
+	}
+
+	if !contains(dataset.Finalizers, finalizer) {
+		controllerutil.AddFinalizer(&dataset, finalizer)
+		if err := r.Update(ctx, &dataset); err != nil {
+			log.Error(err, "unable to add finalizer")
+			return err
+		}
+	}
+
+	if dataset.Status.CreationTime == 0 {
+		return r.onCreate(ctx, dataset, currentHash)
+	} else if currentHash != dataset.Status.SynchronizationHash {
+		return r.onUpdate(ctx, dataset, currentHash)
+	}
+	return nil
+}
+
+func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
+	log := log.FromContext(ctx)
+	bqClient := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name)
+
+	existing, err := bqClient.Metadata(ctx)
+	if err != nil {
+		log.Error(err, "Unable to fetch existing dataset")
+		return err
+	}
+
+	access := createAccessList(dataset)
+
+	for _, existingMember := range existing.Access {
+		found := false
+		for _, member := range access {
+			if existingMember.Entity == member.Entity {
+				found = true
+				break
+			}
+		}
+		if !found {
+			access = append(access, existingMember)
+		}
+	}
+
+	_, err = bqClient.Update(ctx, bigquery.DatasetMetadataToUpdate{
+		Name:        dataset.Spec.Name,
+		Description: dataset.Spec.Description,
+		Access:      access,
+	}, existing.ETag)
+
+	if err != nil {
+		log.Error(err, "unable to update dataset")
+		return err
+	}
+	dataset.Status.LastModifiedTime = int(time.Now().Unix())
+	dataset.Status.Status = "READY"
+	dataset.Status.SynchronizationHash = hash
+	if err := r.Status().Update(ctx, &dataset); err != nil {
+		log.Error(err, "unable to update status")
+		return err
+	}
+	return nil
+}
+
+func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisiov1beta1.BigQueryDataset) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+	bqClient := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name)
+
+	if !contains(dataset.Finalizers, finalizer) {
+		if err := r.Delete(ctx, &dataset); err != nil {
+			log.Error(err, "unable to delete BigQueryDataset resource")
+			return ctrl.Result{}, err
+		}
+		log.Info("Deleted BigQueryDataset", "name", dataset.Name)
+		return ctrl.Result{}, nil
+	}
+
+	log.Info("Deleting BigQueryDataset", "name", dataset.Name)
+	if dataset.Spec.CascadingDelete {
+		if err := bqClient.Delete(ctx); err != nil {
+			dataset.Status.Status = "ERROR"
+			if err := r.Status().Update(ctx, &dataset); err != nil {
+				log.Error(err, "unable to delete dataset")
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+			}
+		}
+	}
+
+	controllerutil.RemoveFinalizer(&dataset, finalizer)
+	if err := r.Update(ctx, &dataset); err != nil {
+		log.Error(err, "unable to update BigQueryDataset")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
+
+	log := log.FromContext(ctx)
+
+	// TODO(thokra): Fields are optional, but we expect correct values as of now.
+	err := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name).Create(ctx, &bigquery.DatasetMetadata{
+		Name:        dataset.Spec.Name,
+		Location:    dataset.Spec.Location,
+		Description: dataset.Spec.Description,
+		Access:      createAccessList(dataset),
+	})
+
+	if err != nil {
+		log.Error(err, "unable to create dataset")
+		return err
+	}
+
+	dataset.Status.CreationTime = int(time.Now().Unix())
+	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	dataset.Status.Status = "READY"
+	dataset.Status.SynchronizationHash = hash
+	if err := r.Status().Update(ctx, &dataset); err != nil {
+		log.Error(err, "unable to update status")
+		return err
+	}
+	return nil
+}
+
+func createAccessList(dataset naisiov1beta1.BigQueryDataset) []*bigquery.AccessEntry {
+	var access []*bigquery.AccessEntry
+	for _, member := range dataset.Spec.Access {
+		// Add the operator user as owner by default
+		access = append(access, &bigquery.AccessEntry{
+			Role:       bigquery.AccessRole(member.Role),
+			Entity:     member.UserByEmail,
+			EntityType: bigquery.UserEmailEntity,
+		})
+	}
+	return access
 }
 
 func contains(list []string, s string) bool {
