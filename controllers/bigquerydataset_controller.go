@@ -20,9 +20,8 @@ import (
 	"context"
 	"time"
 
-	naisiov1beta1 "nais/bqrator/api/v1beta1"
-
 	"cloud.google.com/go/bigquery"
+	naisiov1beta1 "github.com/nais/bqrator/api/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,10 +35,17 @@ const finalizer = "bqrator.nais.io/finalizer"
 type BigQueryDatasetReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
-	bigqueryClient *bigquery.Client
+	bigqueryClient BigQuery
 }
 
-func NewBigQueryDatasetReconciler(client client.Client, scheme *runtime.Scheme, bqClient *bigquery.Client) *BigQueryDatasetReconciler {
+type BigQuery interface {
+	Get(ctx context.Context, projectID, name string) (*bigquery.DatasetMetadata, error)
+	Create(ctx context.Context, projectID string, dataset *bigquery.DatasetMetadata) error
+	Update(ctx context.Context, projectID, name string, dataset bigquery.DatasetMetadataToUpdate, etag string) error
+	Delete(ctx context.Context, projectID, name string) error
+}
+
+func NewBigQueryDatasetReconciler(client client.Client, scheme *runtime.Scheme, bqClient BigQuery) *BigQueryDatasetReconciler {
 	return &BigQueryDatasetReconciler{
 		bigqueryClient: bqClient,
 		Client:         client,
@@ -109,9 +115,8 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 
 func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
 	log := log.FromContext(ctx)
-	bqClient := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name)
 
-	existing, err := bqClient.Metadata(ctx)
+	existing, err := r.bigqueryClient.Get(ctx, dataset.Spec.Project, dataset.Spec.Name)
 	if err != nil {
 		log.Error(err, "Unable to fetch existing dataset")
 		return err
@@ -132,7 +137,7 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisio
 		}
 	}
 
-	_, err = bqClient.Update(ctx, bigquery.DatasetMetadataToUpdate{
+	err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, bigquery.DatasetMetadataToUpdate{
 		Name:        dataset.Spec.Name,
 		Description: dataset.Spec.Description,
 		Access:      access,
@@ -154,7 +159,6 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisio
 
 func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisiov1beta1.BigQueryDataset) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	bqClient := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name)
 
 	if !contains(dataset.Finalizers, finalizer) {
 		if err := r.Delete(ctx, &dataset); err != nil {
@@ -167,7 +171,7 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisio
 
 	log.Info("Deleting BigQueryDataset", "name", dataset.Name)
 	if dataset.Spec.CascadingDelete {
-		if err := bqClient.Delete(ctx); err != nil {
+		if err := r.bigqueryClient.Delete(ctx, dataset.Spec.Project, dataset.Spec.Name); err != nil {
 			dataset.Status.Status = "ERROR"
 			if err := r.Status().Update(ctx, &dataset); err != nil {
 				log.Error(err, "unable to delete dataset")
@@ -185,17 +189,15 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisio
 }
 
 func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
-
 	log := log.FromContext(ctx)
 
 	// TODO(thokra): Fields are optional, but we expect correct values as of now.
-	err := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name).Create(ctx, &bigquery.DatasetMetadata{
+	err := r.bigqueryClient.Create(ctx, dataset.Spec.Project, &bigquery.DatasetMetadata{
 		Name:        dataset.Spec.Name,
 		Location:    dataset.Spec.Location,
 		Description: dataset.Spec.Description,
 		Access:      createAccessList(dataset),
 	})
-
 	if err != nil {
 		log.Error(err, "unable to create dataset")
 		return err
