@@ -26,20 +26,22 @@ import (
 )
 
 type DatasetAccess struct {
-	Role string `json:"role,omitempty"`
+	// +kubebuilder:validation:Enum=READER;WRITER;OWNER
+	Role string `json:"role"`
 
 	/* An email address of a user to grant access to. For example:
 	fred@example.com. */
-	UserByEmail string `json:"userByEmail,omitempty"`
+	UserByEmail string `json:"userByEmail"`
 }
 
 // BigQueryDatasetSpec defines the desired state of BigQueryDataset
 type BigQueryDatasetSpec struct {
-	Name            string          `json:"name,omitempty"`
-	Description     string          `json:"description,omitempty"`
-	Location        string          `json:"location,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	// +kubebuilder:validation:Enum=europe-north1
+	Location        string          `json:"location"`
 	Access          []DatasetAccess `json:"access,omitempty"`
-	Project         string          `json:"project,omitempty"`
+	Project         string          `json:"project"`
 	CascadingDelete bool            `json:"cascadingDelete,omitempty"`
 }
 
@@ -59,7 +61,7 @@ type BigQueryDataset struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BigQueryDatasetSpec   `json:"spec,omitempty"`
+	Spec   BigQueryDatasetSpec   `json:"spec"`
 	Status BigQueryDatasetStatus `json:"status,omitempty"`
 }
 

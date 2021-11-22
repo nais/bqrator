@@ -1,40 +1,68 @@
-apiVersion: v1
-kind: Namespace
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMServiceAccount
 metadata:
+  annotations:
+    cnrm.cloud.google.com/management-conflict-prevention-policy: none
+    cnrm.cloud.google.com/project-id: nais-dev-2e7b
+    cnrm.cloud.google.com/state-into-spec: merge
+    nais.io/team: nais
   labels:
-    control-plane: controller-manager
-  name: system
+    app: bqrator
+    team: aura
+  name: bqrator
+  namespace: serviceaccounts
+spec:
+  displayName: bqrator
+  resourceID: bqrator-nais-3dvamby
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    iam.gke.io/gcp-service-account: bqrator-nais-3dvamby@nais-dev-2e7b.iam.gserviceaccount.com
+  labels:
+    app: bqrator
+    team: aura
+  name: bqrator
+  namespace: nais
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: controller-manager
-  namespace: system
+  name: bqrator
+  namespace: nais
   labels:
-    control-plane: controller-manager
+    app: bqrator
+    team: aura
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      app: bqrator
   replicas: 1
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: manager
+        kubectl.kubernetes.io/default-container: bqrator
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
       labels:
-        control-plane: controller-manager
+        app: bqrator
     spec:
       securityContext:
         runAsNonRoot: true
+      imagePullSecrets:
+      - name: gh-docker-credentials
       containers:
       - command:
         - /manager
         args:
         - --leader-elect
-        image: controller:latest
-        name: manager
+        image: ghcr.io/nais/bqrator:latest
+        name: bqrator
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         livenessProbe:
           httpGet:
             path: /healthz
@@ -47,8 +75,6 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        # TODO(user): Configure the resources accordingly based on the project requirements.
-        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources:
           limits:
             cpu: 500m
@@ -56,5 +82,5 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      serviceAccountName: controller-manager
+      serviceAccountName: bqrator
       terminationGracePeriodSeconds: 10
