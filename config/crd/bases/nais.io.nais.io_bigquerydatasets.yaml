@@ -40,11 +40,18 @@ spec:
                 items:
                   properties:
                     role:
+                      enum:
+                      - READER
+                      - WRITER
+                      - OWNER
                       type: string
                     userByEmail:
                       description: " An email address of a user to grant access to.
                         For example: \tfred@example.com."
                       type: string
+                  required:
+                  - role
+                  - userByEmail
                   type: object
                 type: array
               cascadingDelete:
@@ -52,11 +59,17 @@ spec:
               description:
                 type: string
               location:
+                enum:
+                - europe-north1
                 type: string
               name:
                 type: string
               project:
                 type: string
+            required:
+            - location
+            - name
+            - project
             type: object
           status:
             description: BigQueryDatasetStatus defines the observed state of BigQueryDataset
@@ -70,6 +83,8 @@ spec:
               synchronizationHash:
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
