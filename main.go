@@ -19,8 +19,10 @@ package main
 import (
 	"context"
 	"flag"
-	"nais/bqrator/controllers"
 	"os"
+
+	"github.com/nais/bqrator/controllers"
+	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -33,8 +35,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	naisiov1beta1 "nais/bqrator/api/v1beta1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -46,7 +46,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(naisiov1beta1.AddToScheme(scheme))
+	utilruntime.Must(google_nais_io_v1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
