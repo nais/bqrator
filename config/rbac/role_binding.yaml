@@ -9,5 +9,5 @@ roleRef:
   name: bqrator
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
-  namespace: system
+  name: bqrator
+  namespace: nais

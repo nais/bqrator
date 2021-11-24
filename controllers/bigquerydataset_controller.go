@@ -23,6 +23,7 @@ import (
 	naisiov1beta1 "nais/bqrator/api/v1beta1"
 
 	"cloud.google.com/go/bigquery"
+	"google.golang.org/api/googleapi"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -185,8 +186,11 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisio
 }
 
 func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
-
 	log := log.FromContext(ctx)
+	dataset.Status.CreationTime = int(time.Now().Unix())
+	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	dataset.Status.Status = "READY"
+	dataset.Status.SynchronizationHash = hash
 
 	// TODO(thokra): Fields are optional, but we expect correct values as of now.
 	err := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name).Create(ctx, &bigquery.DatasetMetadata{
@@ -195,8 +199,11 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisio
 		Description: dataset.Spec.Description,
 		Access:      createAccessList(dataset),
 	})
-
 	if err != nil {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 409 {
+			log.Info("Dataset already exists")
+			return r.onUpdate(ctx, dataset, hash)
+		}
 		log.Error(err, "unable to create dataset")
 		return err
 	}
