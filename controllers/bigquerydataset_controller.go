@@ -23,6 +23,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
+	"google.golang.org/api/googleapi"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -190,6 +191,11 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 
 func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
 	log := log.FromContext(ctx)
+	createdStatus := metav1.ConditionStatus(strconv.Itoa(int(time.Now().Unix())))
+	addStatusCondition(&dataset.Status.Conditions, "Created", "created", "Dataset created", createdStatus)
+	addStatusCondition(&dataset.Status.Conditions, "Modified", "created", "Dataset modified", createdStatus)
+	addStatusCondition(&dataset.Status.Conditions, "Status", "created", "Dataset ready", metav1.ConditionStatus("READY"))
+	dataset.Status.SynchronizationHash = hash
 
 	// TODO(thokra): Fields are optional, but we expect correct values as of now.
 	err := r.bigqueryClient.DatasetInProject(dataset.Spec.Project, dataset.Spec.Name).Create(ctx, &bigquery.DatasetMetadata{
@@ -199,15 +205,14 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google
 		Access:      createAccessList(dataset),
 	})
 	if err != nil {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 409 {
+			log.Info("Dataset already exists")
+			return r.onUpdate(ctx, dataset, hash)
+		}
 		log.Error(err, "unable to create dataset")
 		return err
 	}
 
-	createdStatus := metav1.ConditionStatus(strconv.Itoa(int(time.Now().Unix())))
-	addStatusCondition(&dataset.Status.Conditions, "Created", "created", "Dataset created", createdStatus)
-	addStatusCondition(&dataset.Status.Conditions, "Modified", "created", "Dataset modified", createdStatus)
-	addStatusCondition(&dataset.Status.Conditions, "Status", "created", "Dataset ready", metav1.ConditionStatus("READY"))
-	dataset.Status.SynchronizationHash = hash
 	if err := r.Status().Update(ctx, &dataset); err != nil {
 		log.Error(err, "unable to update status")
 		return err

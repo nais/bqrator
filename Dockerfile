@@ -24,12 +24,11 @@ ARG USER=default
 ENV HOME /home/$USER
 
 # add new user
-RUN adduser -D $USER \
+RUN adduser -D $USER 
 
 USER $USER
 WORKDIR $HOME
 
-COPY --from=builder /workspace/manager .
-USER default:default
+COPY --from=builder /workspace/manager $HOME
 
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/home/default/manager"]
