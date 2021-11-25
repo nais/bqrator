@@ -1,12 +1,13 @@
 name: Build and deploy
-on: push
+on:
+  push:
+    branches:
+      - main
 
 jobs:
   set-version:
     name: Set version
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: integration-tests
     outputs:
       version: ${{ steps.set-version.outputs.version }}
     steps:
@@ -18,7 +19,7 @@ jobs:
   build-push:
     name: Build and push image
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    needs: set-version
     steps:
       - name: Checkout bqrator
         uses: actions/checkout@v2
@@ -49,7 +50,6 @@ jobs:
     name: Release to nais-yaml
     runs-on: ubuntu-latest
     needs: build-push
-    if: github.ref == 'refs/heads/master'
     steps:
       - name: Checkout bqrator
         uses: actions/checkout@v2

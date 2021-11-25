@@ -87,7 +87,7 @@ endif
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
-rbac: manifests kustomize
+rbac: kustomize
 	$(KUSTOMIZE) build config/rbac > rbac.yaml
 
 yaml-file: manifests kustomize ## turn CRDs into the K8s cluster specified in ~/.kube/config.
