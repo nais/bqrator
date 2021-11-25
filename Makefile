@@ -87,10 +87,13 @@ endif
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
+rbac: manifests kustomize
+	$(KUSTOMIZE) build config/rbac > rbac.yaml
+
 yaml-file: manifests kustomize ## turn CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config > bqrator.yaml
 apply-to-cluster: manifests kustomize ## turn CRDs into the K8s cluster specified in ~/.kube/config.
-	kubectl apply -k config 
+	kubectl apply -k config
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
