@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -102,8 +101,7 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 		}
 	}
 
-	created := meta.FindStatusCondition(dataset.Status.Conditions, "Created")
-	if created == nil {
+	if dataset.Status.CreationTime == 0 {
 		return r.onCreate(ctx, dataset, currentHash)
 	} else if currentHash != dataset.Status.SynchronizationHash {
 		return r.onUpdate(ctx, dataset, currentHash)
@@ -146,9 +144,14 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 		log.Error(err, "unable to update dataset")
 		return err
 	}
-	modifiedStatus := metav1.ConditionStatus(strconv.Itoa(int(time.Now().Unix())))
-	addStatusCondition(&dataset.Status.Conditions, "Modified", "modified", "Dataset modified", modifiedStatus)
-	addStatusCondition(&dataset.Status.Conditions, "Status", "modified", "Dataset ready", metav1.ConditionStatus("READY"))
+	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		LastTransitionTime: metav1.Time(metav1.NowMicro()),
+		Reason:             "UpToDate",
+		Message:            "The resource is up to date",
+	})
 	dataset.Status.SynchronizationHash = hash
 	if err := r.Status().Update(ctx, &dataset); err != nil {
 		log.Error(err, "unable to update status")
@@ -173,11 +176,19 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 	log.Info("Deleting BigQueryDataset", "name", dataset.Name)
 	if dataset.Spec.CascadingDelete {
 		if err := bqClient.Delete(ctx); err != nil {
-			addStatusCondition(&dataset.Status.Conditions, "Status", "deletion", "Dataset deletion error", metav1.ConditionStatus(err.Error()))
+			meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+				Type:               "Ready",
+				Status:             metav1.ConditionFalse,
+				LastTransitionTime: metav1.Time(metav1.NowMicro()),
+				Reason:             "DeleteError",
+				Message:            "Unable to delete from Google: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, &dataset); err != nil {
-				log.Error(err, "unable to delete dataset")
+				log.Error(err, "unable to update status when deleting dataset")
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 			}
+			log.Error(err, "unable to delete dataset")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
 	}
 
@@ -191,10 +202,15 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 
 func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
 	log := log.FromContext(ctx)
-	createdStatus := metav1.ConditionStatus(strconv.Itoa(int(time.Now().Unix())))
-	addStatusCondition(&dataset.Status.Conditions, "Created", "created", "Dataset created", createdStatus)
-	addStatusCondition(&dataset.Status.Conditions, "Modified", "created", "Dataset modified", createdStatus)
-	addStatusCondition(&dataset.Status.Conditions, "Status", "created", "Dataset ready", metav1.ConditionStatus("READY"))
+	dataset.Status.CreationTime = int(time.Now().Unix())
+	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		LastTransitionTime: metav1.Time(metav1.NowMicro()),
+		Reason:             "UpToDate",
+		Message:            "The resource is up to date",
+	})
 	dataset.Status.SynchronizationHash = hash
 
 	// TODO(thokra): Fields are optional, but we expect correct values as of now.
@@ -240,23 +256,4 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
-}
-
-func addStatusCondition(conditions *[]metav1.Condition, name, reason, message string, status metav1.ConditionStatus) {
-	existing := meta.FindStatusCondition(*conditions, name)
-	if existing == nil {
-		existing = &metav1.Condition{
-			Type:               name,
-			Status:             status,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-			Reason:             reason,
-			Message:            message,
-		}
-	} else {
-		existing.Status = status
-		existing.Reason = reason
-		existing.Message = message
-	}
-
-	meta.SetStatusCondition(conditions, *existing)
 }

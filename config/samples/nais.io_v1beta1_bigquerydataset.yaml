@@ -2,6 +2,7 @@ apiVersion: google.nais.io/v1
 kind: BigQueryDataset
 metadata:
   name: bigquerydataset-sample
+  namespace: aura
 spec:
   name: bqrater_test_set2
   description: "Supert datasett som har data fra tidenes morgen"

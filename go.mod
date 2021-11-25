@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	cloud.google.com/go/bigquery v1.8.0
-	github.com/nais/liberator v0.0.0-20211124141023-214bf53a2394
+	github.com/nais/liberator v0.0.0-20211125112215-76ccd45f55c7
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
 	k8s.io/apimachinery v0.22.2
