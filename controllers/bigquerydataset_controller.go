@@ -57,9 +57,9 @@ func (r *BigQueryDatasetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-//+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets/finalizers,verbs=update
+//+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
