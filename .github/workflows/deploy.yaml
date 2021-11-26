@@ -82,4 +82,4 @@ jobs:
           git --no-pager diff --cached
           git status
           git commit -a -m "Bump bqrator to version ${version}"
-        # git push
+          git push
