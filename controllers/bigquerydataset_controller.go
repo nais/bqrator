@@ -150,7 +150,7 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 		log.Error(err, "unable to update dataset")
 		return err
 	}
-	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	dataset.Status.LastModifiedTime = int(time.Now().Unix())
 	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionTrue,
@@ -159,6 +159,9 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 		Message:            "The resource is up to date",
 	})
 	dataset.Status.SynchronizationHash = hash
+
+	log.Error(err, "UPDATE STATUS HERE", "isEqual", dataset.Status.LastModifiedTime == dataset.Status.CreationTime)
+
 	if err := r.Status().Update(ctx, &dataset); err != nil {
 		log.Error(err, "unable to update status")
 		return err

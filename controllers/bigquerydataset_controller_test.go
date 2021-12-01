@@ -3,9 +3,12 @@ package controllers
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/nais/bqrator/api/v1beta1"
+	"cloud.google.com/go/bigquery"
+	"github.com/google/go-cmp/cmp"
+	naisv1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -13,16 +16,16 @@ import (
 func TestBigqueryDatasetController(t *testing.T) {
 	ctx := context.Background()
 
-	dataset := v1beta1.BigQueryDataset{
+	dataset := naisv1.BigQueryDataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-set",
 			Namespace: "default",
 		},
-		Spec: v1beta1.BigQueryDatasetSpec{
+		Spec: naisv1.BigQueryDatasetSpec{
 			Name:        "test-dataset",
 			Description: "test description",
 			Location:    "europe-north1",
-			Access: []v1beta1.DatasetAccess{
+			Access: []naisv1.DatasetAccess{
 				{
 					Role:        "WRITER",
 					UserByEmail: "test@helper.dev",
@@ -37,19 +40,223 @@ func TestBigqueryDatasetController(t *testing.T) {
 		t.Fatalf("Failed to create dataset: %v", err)
 	}
 
-	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+	var err error
+	gotten := eventually(100*time.Millisecond, 10, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.CreationTime > 0
+	})
 	if err != nil {
 		t.Fatalf("Failed to get dataset: %v", err)
+	} else if !gotten {
+		t.Fatal("Never got the dataset from k8s")
 	}
 
-	spew.Config.Dump(dataset.Status)
-	if dataset.Status.CreationTime > 0 {
-		t.Errorf("CreationTime < 0")
+	if dataset.Status.CreationTime <= 0 {
+		t.Errorf("CreationTime <= 0")
 	}
-	if dataset.Status.LastModifiedTime > 0 {
-		t.Errorf("LastModifiedTime < 0")
+	if dataset.Status.LastModifiedTime <= 0 {
+		t.Errorf("LastModifiedTime <= 0")
 	}
-	if dataset.Status.Status != "READY" {
-		t.Errorf("expected status to be 'READY', got %q", dataset.Status.Status)
+	status := meta.FindStatusCondition(dataset.Status.Conditions, "Ready")
+	if status == nil {
+		t.Errorf("expected 'READY' condition, but was not found")
+	} else if status.Status != metav1.ConditionTrue {
+		t.Errorf("expected status to be 'TRUE', got %q", status.Status)
 	}
+}
+
+func TestBigqueryDatasetControllerAlreadyExistsInGCP(t *testing.T) {
+	ctx := context.Background()
+
+	bqMock.Create(ctx, "gcpproject", &bigquery.DatasetMetadata{
+		Name:         "test-set-exists",
+		Location:     "europe-north1",
+		CreationTime: time.Now(),
+	})
+	dataset := naisv1.BigQueryDataset{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-set-exists",
+			Namespace: "default",
+		},
+		Spec: naisv1.BigQueryDatasetSpec{
+			Name:        "test-set-exists",
+			Description: "test description",
+			Location:    "europe-north1",
+			Project:     "gcpproject",
+		},
+	}
+
+	if err := k8sClient.Create(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to create dataset: %v", err)
+	}
+
+	var err error
+	gotten := eventually(100*time.Millisecond, 10, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.CreationTime > 0
+	})
+	if err != nil {
+		t.Fatalf("Failed to get dataset: %v", err)
+	} else if !gotten {
+		t.Fatal("Never got the dataset from k8s")
+	}
+
+	if dataset.Status.CreationTime <= 0 {
+		t.Errorf("CreationTime <= 0")
+	}
+	if dataset.Status.LastModifiedTime <= 0 {
+		t.Errorf("LastModifiedTime <= 0")
+	}
+	status := meta.FindStatusCondition(dataset.Status.Conditions, "Ready")
+	if status == nil {
+		t.Errorf("expected 'READY' condition, but was not found")
+	} else if status.Status != metav1.ConditionTrue {
+		t.Errorf("expected status to be 'TRUE', got %q", status.Status)
+	}
+}
+
+func TestBigqueryDatasetControllerUpdate(t *testing.T) {
+	ctx := context.Background()
+
+	dataset := naisv1.BigQueryDataset{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-set-update",
+			Namespace: "default",
+		},
+		Spec: naisv1.BigQueryDatasetSpec{
+			Name:        "test-dataset-update",
+			Description: "test description",
+			Location:    "europe-north1",
+			Access: []naisv1.DatasetAccess{
+				{
+					Role:        "WRITER",
+					UserByEmail: "test@helper.dev",
+				},
+			},
+			Project:         "gcpproject",
+			CascadingDelete: true,
+		},
+	}
+
+	if err := k8sClient.Create(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to create dataset: %v", err)
+	}
+
+	// Wait 1s+ to ensure that creation second and modified second isn't equal
+	time.Sleep(1500 * time.Millisecond)
+
+	var err error
+	gotten := eventually(100*time.Millisecond, 10, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.CreationTime > 0
+	})
+	if err != nil {
+		t.Fatalf("Failed to get dataset: %v", err)
+	} else if !gotten {
+		t.Fatal("Never got the dataset from k8s")
+	}
+
+	dataset.Spec.Access = []naisv1.DatasetAccess{
+		{
+			Role:        "READER",
+			UserByEmail: "mockuser1337@nav.no",
+		},
+	}
+	if err := k8sClient.Update(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to update dataset: %v", err)
+	}
+
+	gotten = eventually(100*time.Millisecond, 15, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.LastModifiedTime > dataset.Status.CreationTime
+	})
+	if err != nil {
+		t.Fatalf("Failed to get updated dataset: %v", err)
+	} else if !gotten {
+		t.Fatal("Never got the updated dataset from k8s")
+	}
+
+	metadata, err := bqMock.Get(ctx, dataset.Spec.Project, dataset.Spec.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []*bigquery.AccessEntry{
+		{
+			Role:       "READER",
+			EntityType: bigquery.UserEmailEntity,
+			Entity:     "mockuser1337@nav.no",
+		},
+		{
+			Role:       "WRITER",
+			EntityType: bigquery.UserEmailEntity,
+			Entity:     "test@helper.dev",
+		},
+	}
+
+	if !cmp.Equal(metadata.Access, expected) {
+		t.Error(cmp.Diff(metadata.Access, expected))
+	}
+}
+
+func TestBigqueryDatasetControllerDelete(t *testing.T) {
+	ctx := context.Background()
+
+	dataset := naisv1.BigQueryDataset{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-set-delete",
+			Namespace: "default",
+		},
+		Spec: naisv1.BigQueryDatasetSpec{
+			Name:        "test-dataset-delete",
+			Description: "test description",
+			Location:    "europe-north1",
+			Access: []naisv1.DatasetAccess{
+				{
+					Role:        "WRITER",
+					UserByEmail: "test@helper.dev",
+				},
+			},
+			Project:         "gcpproject",
+			CascadingDelete: true,
+		},
+	}
+
+	if err := k8sClient.Create(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to create dataset: %v", err)
+	}
+
+	var err error
+	gotten := eventually(100*time.Millisecond, 10, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.CreationTime > 0
+	})
+	if err != nil {
+		t.Fatalf("Failed to get dataset: %v", err)
+	} else if !gotten {
+		t.Fatal("Never got the dataset from k8s")
+	}
+
+	if err := k8sClient.Delete(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to delete dataset: %v", err)
+	}
+
+	gotten = eventually(100*time.Millisecond, 10, func() bool {
+		_, ok := bqMock.state[dataset.Spec.Project+"_"+dataset.Spec.Name]
+		return !ok
+	})
+	if !gotten {
+		t.Fatalf("Failed delete datset from state")
+	}
+}
+
+func eventually(delay time.Duration, maxIterations int, f func() bool) bool {
+	for i := 0; i < maxIterations; i++ {
+		if f() {
+			return true
+		}
+
+		time.Sleep(delay)
+	}
+	return false
 }

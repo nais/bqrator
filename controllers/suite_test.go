@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	naisv1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
+	"github.com/nais/liberator/pkg/crd"
+	"google.golang.org/api/googleapi"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,9 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	naisiov1beta1 "github.com/nais/bqrator/api/v1beta1"
-	//+kubebuilder:scaffold:imports
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -56,7 +55,7 @@ func TestMain(m *testing.M) {
 	logf.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseDevMode(true)))
 
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{crd.YamlDirectory()},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -66,7 +65,7 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	if err := naisiov1beta1.AddToScheme(scheme.Scheme); err != nil {
+	if err := naisv1.AddToScheme(scheme.Scheme); err != nil {
 		log.Fatal(err)
 	}
 
@@ -121,7 +120,10 @@ func (b *bqMocker) Get(ctx context.Context, projectID, name string) (*bigquery.D
 func (b *bqMocker) Create(ctx context.Context, projectID string, dataset *bigquery.DatasetMetadata) error {
 	fmt.Println("CREATE", projectID, dataset.Name)
 	if _, ok := b.state[projectID+"_"+dataset.Name]; ok {
-		return fmt.Errorf("dataset already exists")
+		return &googleapi.Error{
+			Code:    409,
+			Message: dataset.Name + " already exists",
+		}
 	}
 	b.state[projectID+"_"+dataset.Name] = dataset
 	return nil
