@@ -93,5 +93,5 @@ jobs:
           git add .
           git --no-pager diff --cached
           git status
-          git commit -a -m "Bump bqrator to version ${version}"
+          git commit -a -m "Bump bqrator to version ${{ needs.set-version.outputs.version }}"
           git push
