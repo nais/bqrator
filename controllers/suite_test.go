@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	if err := testEnv.Stop(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	os.Exit(code)
