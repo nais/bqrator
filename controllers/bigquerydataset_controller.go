@@ -160,8 +160,6 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 	})
 	dataset.Status.SynchronizationHash = hash
 
-	log.Error(err, "UPDATE STATUS HERE", "isEqual", dataset.Status.LastModifiedTime == dataset.Status.CreationTime)
-
 	if err := r.Status().Update(ctx, &dataset); err != nil {
 		log.Error(err, "unable to update status")
 		return err
