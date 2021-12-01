@@ -21,7 +21,10 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	naisiov1beta1 "github.com/nais/bqrator/api/v1beta1"
+	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
+	"google.golang.org/api/googleapi"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,20 +59,20 @@ func NewBigQueryDatasetReconciler(client client.Client, scheme *runtime.Scheme, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BigQueryDatasetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&naisiov1beta1.BigQueryDataset{}).
+		For(&google_nais_io_v1.BigQueryDataset{}).
 		Complete(r)
 }
 
-//+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=nais.io.nais.io,resources=bigquerydatasets/finalizers,verbs=update
+//+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	var dataset naisiov1beta1.BigQueryDataset
+	var dataset google_nais_io_v1.BigQueryDataset
 	if err := r.Get(ctx, req.NamespacedName, &dataset); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "unable to fetch BigQueryDataset")
@@ -89,7 +92,7 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset) error {
+func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset) error {
 	log := log.FromContext(ctx)
 	currentHash, err := dataset.Hash()
 	if err != nil {
@@ -113,7 +116,7 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 	return nil
 }
 
-func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
+func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
 	log := log.FromContext(ctx)
 
 	existing, err := r.bigqueryClient.Get(ctx, dataset.Spec.Project, dataset.Spec.Name)
@@ -147,8 +150,14 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisio
 		log.Error(err, "unable to update dataset")
 		return err
 	}
-	dataset.Status.LastModifiedTime = int(time.Now().Unix())
-	dataset.Status.Status = "READY"
+	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		LastTransitionTime: metav1.Time(metav1.NowMicro()),
+		Reason:             "UpToDate",
+		Message:            "The resource is up to date",
+	})
 	dataset.Status.SynchronizationHash = hash
 	if err := r.Status().Update(ctx, &dataset); err != nil {
 		log.Error(err, "unable to update status")
@@ -157,7 +166,7 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset naisio
 	return nil
 }
 
-func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisiov1beta1.BigQueryDataset) (ctrl.Result, error) {
+func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	if !contains(dataset.Finalizers, finalizer) {
@@ -172,11 +181,19 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisio
 	log.Info("Deleting BigQueryDataset", "name", dataset.Name)
 	if dataset.Spec.CascadingDelete {
 		if err := r.bigqueryClient.Delete(ctx, dataset.Spec.Project, dataset.Spec.Name); err != nil {
-			dataset.Status.Status = "ERROR"
+			meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+				Type:               "Ready",
+				Status:             metav1.ConditionFalse,
+				LastTransitionTime: metav1.Time(metav1.NowMicro()),
+				Reason:             "DeleteError",
+				Message:            "Unable to delete from Google: " + err.Error(),
+			})
 			if err := r.Status().Update(ctx, &dataset); err != nil {
-				log.Error(err, "unable to delete dataset")
+				log.Error(err, "unable to update status when deleting dataset")
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 			}
+			log.Error(err, "unable to delete dataset")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 		}
 	}
 
@@ -188,8 +205,18 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset naisio
 	return ctrl.Result{}, nil
 }
 
-func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisiov1beta1.BigQueryDataset, hash string) error {
+func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
 	log := log.FromContext(ctx)
+	dataset.Status.CreationTime = int(time.Now().Unix())
+	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		LastTransitionTime: metav1.Time(metav1.NowMicro()),
+		Reason:             "UpToDate",
+		Message:            "The resource is up to date",
+	})
+	dataset.Status.SynchronizationHash = hash
 
 	// TODO(thokra): Fields are optional, but we expect correct values as of now.
 	err := r.bigqueryClient.Create(ctx, dataset.Spec.Project, &bigquery.DatasetMetadata{
@@ -199,14 +226,14 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisio
 		Access:      createAccessList(dataset),
 	})
 	if err != nil {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 409 {
+			log.Info("Dataset already exists")
+			return r.onUpdate(ctx, dataset, hash)
+		}
 		log.Error(err, "unable to create dataset")
 		return err
 	}
 
-	dataset.Status.CreationTime = int(time.Now().Unix())
-	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
-	dataset.Status.Status = "READY"
-	dataset.Status.SynchronizationHash = hash
 	if err := r.Status().Update(ctx, &dataset); err != nil {
 		log.Error(err, "unable to update status")
 		return err
@@ -214,7 +241,7 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset naisio
 	return nil
 }
 
-func createAccessList(dataset naisiov1beta1.BigQueryDataset) []*bigquery.AccessEntry {
+func createAccessList(dataset google_nais_io_v1.BigQueryDataset) []*bigquery.AccessEntry {
 	var access []*bigquery.AccessEntry
 	for _, member := range dataset.Spec.Access {
 		// Add the operator user as owner by default
