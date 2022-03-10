@@ -250,6 +250,49 @@ func TestBigqueryDatasetControllerDelete(t *testing.T) {
 	}
 }
 
+func TestRemoveDeletedServiceAccounts(t *testing.T) {
+	t.Run("removes deleted service accounts", func(t *testing.T) {
+		existing := []*bigquery.AccessEntry{
+			{Entity: "deleted:serviceAccount:user1"},
+			{Entity: "serviceAccount:user1"},
+			{Entity: "serviceAccount:user2"},
+		}
+		expected := []*bigquery.AccessEntry{
+			{Entity: "serviceAccount:user1"},
+			{Entity: "serviceAccount:user2"},
+		}
+
+		actual := removeDeletedServiceAccounts(existing)
+		if !cmp.Equal(expected, actual) {
+			t.Error(cmp.Diff(expected, actual))
+		}
+	})
+	t.Run("doesn't do anything if no deleted service accounts", func(t *testing.T) {
+		existing := []*bigquery.AccessEntry{
+			{Entity: "serviceAccount:user1"},
+			{Entity: "serviceAccount:user2"},
+		}
+		expected := []*bigquery.AccessEntry{
+			{Entity: "serviceAccount:user1"},
+			{Entity: "serviceAccount:user2"},
+		}
+
+		actual := removeDeletedServiceAccounts(existing)
+		if !cmp.Equal(expected, actual) {
+			t.Error(cmp.Diff(expected, actual))
+		}
+	})
+	t.Run("handles nil", func(t *testing.T) {
+		var existing []*bigquery.AccessEntry
+		var expected []*bigquery.AccessEntry
+
+		actual := removeDeletedServiceAccounts(existing)
+		if !cmp.Equal(expected, actual) {
+			t.Error(cmp.Diff(expected, actual))
+		}
+	})
+}
+
 func eventually(delay time.Duration, maxIterations int, f func() bool) bool {
 	for i := 0; i < maxIterations; i++ {
 		if f() {

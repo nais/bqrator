@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -126,8 +127,8 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 	}
 
 	access := createAccessList(dataset)
-
-	for _, existingMember := range existing.Access {
+	existingAccess := removeDeletedServiceAccounts(existing.Access)
+	for _, existingMember := range existingAccess {
 		found := false
 		for _, member := range access {
 			if existingMember.Entity == member.Entity {
@@ -262,4 +263,15 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func removeDeletedServiceAccounts(accessList []*bigquery.AccessEntry) []*bigquery.AccessEntry {
+	var newAccessList []*bigquery.AccessEntry
+	for _, entry := range accessList {
+		if !strings.HasPrefix(entry.Entity, "deleted:serviceAccount") {
+			newAccessList = append(newAccessList, entry)
+		}
+	}
+
+	return newAccessList
 }
