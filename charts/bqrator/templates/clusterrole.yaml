@@ -1,0 +1,48 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "bqrator.name" . }}
+  labels:
+    {{- include "bqrator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - google.nais.io
+  resources:
+  - bigquerydatasets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - google.nais.io
+  resources:
+  - bigquerydatasets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - google.nais.io
+  resources:
+  - bigquerydatasets/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "bqrator.name" . }}
+  labels:
+    {{- include "bqrator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "bqrator.name" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "bqrator.name" . }}
+  namespace: {{ .Release.Namespace }}
