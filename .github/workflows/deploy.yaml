@@ -11,7 +11,7 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v2
         with:
           go-version: "1.19"
@@ -25,10 +25,10 @@ jobs:
     outputs:
       version: ${{ steps.set-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: set version
         id: set-version
-        run: echo ::set-output name=version::"$(date '+%Y-%m-%d')-$(git --no-pager log -1 --pretty=%h)"
+        run: echo "version="$(date '+%Y-%m-%d')-$(git --no-pager log -1 --pretty=%h)" >> $GITHUB_OUTPUT
 
   build-push:
     name: Build and push image
@@ -36,7 +36,7 @@ jobs:
     needs: set-version
     steps:
       - name: Checkout bqrator
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up environment
         run: |
@@ -47,14 +47,14 @@ jobs:
           echo "IMAGE=$prefix:$version" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@ab80d026d4753220c4243394c07c7d80f9638d06 # Use commit-sha1 instead of tag for security concerns
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # Use commit-sha1 instead of tag for security concerns
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Dockerimage
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           push: true
@@ -74,7 +74,7 @@ jobs:
           app-id: ${{ secrets.NAIS_APP_ID }}
           repo: navikt/nais-yaml
       - name: Checkout nais-yaml
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: navikt/nais-yaml
           token: ${{ steps.get-token.outputs.token }}
