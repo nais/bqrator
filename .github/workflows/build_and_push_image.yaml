@@ -5,24 +5,22 @@ on:
       - main
     paths-ignore:
       - "charts/**"
-
+      - "*.md"
 env:
   REGISTRY: europe-north1-docker.pkg.dev/nais-io/nais/images
   IMAGE: bqrator
   GOOGLE_SA_USER: gh-bqrator
-
 jobs:
   integration-tests:
     name: Integration tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@24cb9080177205b6e8c946b17badbe402adc938f # ratchet:actions/checkout@v3
+      - uses: actions/setup-go@6edd4406fa81c3da01a34fa6f6343087c207a568 # ratchet:actions/setup-go@v3
         with:
           go-version: "^1.19"
       - name: Run tests
         run: make test
-
   build_and_push:
     needs: integration-tests
     permissions:
@@ -31,43 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v0.8.3"
+        uses: actions/checkout@24cb9080177205b6e8c946b17badbe402adc938f # ratchet:actions/checkout@v3
+      - uses: nais/build-push-sign@7ec7617aae88394f31653b30c0b20b5706678396 # ratchet:nais/build-push-sign@main
+        id: build-push-sign
         with:
+          name: bqrator
+          google_service_account: ${{ env.GOOGLE_SA_USER }}
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: "${{ env.GOOGLE_SA_USER }}@nais-io.iam.gserviceaccount.com"
-          token_format: "access_token"
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: "oauth2accesstoken"
-          password: "${{ steps.auth.outputs.access_token }}"
-      - name: Docker meta
-        id: metadata
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
-          tags: |
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
-            type=sha
-      - name: Build and push
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          push: ${{ github.actor != 'dependabot[bot]' }}
