@@ -7,7 +7,6 @@ on:
       - "charts/**"
       - "*.md"
 env:
-  REGISTRY: europe-north1-docker.pkg.dev/nais-io/nais/images
   IMAGE: bqrator
   GOOGLE_SA_USER: gh-bqrator
 jobs:
@@ -33,7 +32,7 @@ jobs:
       - uses: nais/build-push-sign@7ec7617aae88394f31653b30c0b20b5706678396 # ratchet:nais/build-push-sign@main
         id: build-push-sign
         with:
-          name: bqrator
+          name: ${{ env.IMAGE }}
           google_service_account: ${{ env.GOOGLE_SA_USER }}
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: ${{ github.actor != 'dependabot[bot]' }}
