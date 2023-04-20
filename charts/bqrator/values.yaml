@@ -2,8 +2,6 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-apiCidr: 172.16.0.2/32
-
 replicas:
   cpuThresholdPercentage: 50
   max: 1
