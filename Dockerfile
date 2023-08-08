@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM cgr.dev/chainguard/go:1.20 as builder
+FROM golang:1.20 as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -17,7 +17,7 @@ COPY controllers/ controllers/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
-FROM cgr.dev/chainguard/static
+FROM gcr.io/distroless/static-debian11
 
 WORKDIR /app
 

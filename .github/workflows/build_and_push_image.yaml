@@ -31,10 +31,9 @@ jobs:
       id-token: "write"
     runs-on: ubuntu-latest
     env:
-      BUILDER_IMG: "cgr.dev/chainguard/go:1.20"
-      RUNNER_IMG: "cgr.dev/chainguard/static"
-      BASEIMG_ID: "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main"
-      BASEIMG_ISSUER: "https://token.actions.githubusercontent.com"
+      RUNNER_IMG: "gcr.io/distroless/static-debian11"
+      RUNNERIMG_IDENTITY: "keyless@distroless.iam.gserviceaccount.com"
+      RUNNERIMG_ISSUER: "https://accounts.google.com"
     steps:
       - name: Checkout
         uses: actions/checkout@24cb9080177205b6e8c946b17badbe402adc938f # ratchet:actions/checkout@v3
@@ -43,10 +42,8 @@ jobs:
         uses: sigstore/cosign-installer@9e9de2292db7abb3f51b7f4808d98f0d347a8919 # ratchet:sigstore/cosign-installer@main
         with:
           cosign-release: 'v2.0.0'
-      - name: Verify builder image
-        run: cosign verify --certificate-identity ${{ env.BASEIMG_ID }} --certificate-oidc-issuer ${{ env.BASEIMG_ISSUER }} ${{ env.BUILDER_IMG }}
       - name: Verify runner image
-        run: cosign verify --certificate-identity ${{ env.BASEIMG_ID }} --certificate-oidc-issuer ${{ env.BASEIMG_ISSUER }} ${{ env.RUNNER_IMG }}
+        run: cosign verify --certificate-identity ${{ env.RUNNERIMG_IDENTITY }} --certificate-oidc-issuer ${{ env.RUNNERIMG_ISSUER }} ${{ env.RUNNER_IMG }}
       - uses: nais/build-push-sign@7ec7617aae88394f31653b30c0b20b5706678396 # ratchet:nais/build-push-sign@main
         id: build-push-sign
         with:
