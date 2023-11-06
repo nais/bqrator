@@ -3,10 +3,10 @@ module github.com/nais/bqrator
 go 1.21
 
 require (
-	cloud.google.com/go/bigquery v1.56.0
+	cloud.google.com/go/bigquery v1.57.1
 	github.com/google/go-cmp v0.6.0
 	github.com/nais/liberator v0.0.0-20231018185127-3afb82cb17e8
-	google.golang.org/api v0.148.0
+	google.golang.org/api v0.149.0
 	k8s.io/apimachinery v0.28.3
 	k8s.io/client-go v0.28.3
 	sigs.k8s.io/controller-runtime v0.16.3
@@ -41,7 +41,7 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
-	github.com/google/uuid v1.3.1 // indirect
+	github.com/google/uuid v1.4.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
