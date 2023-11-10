@@ -3,7 +3,7 @@ module github.com/nais/bqrator
 go 1.21
 
 require (
-	cloud.google.com/go/bigquery v1.56.0
+	cloud.google.com/go/bigquery v1.57.1
 	github.com/google/go-cmp v0.6.0
 	github.com/nais/liberator v0.0.0-20231018185127-3afb82cb17e8
 	google.golang.org/api v0.149.0
