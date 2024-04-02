@@ -1,6 +1,8 @@
 apiVersion: v2
 name: bqrator
-description: A Helm chart for Kubernetes
+description: A Helm chart for bqrator
+sources:
+  - https://github.com/nais/bqrator/tree/main/charts
 
 # A chart can be either an 'application' or a 'library' chart.
 #
