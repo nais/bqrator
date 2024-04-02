@@ -14,7 +14,8 @@ env:
 jobs:
   build_and_push:
     outputs:
-      version: ${{ steps.build-push-sign.outputs.version }}
+      version: ${{ steps.build_chart.outputs.version }}
+      name: ${{ steps.build_chart.outputs.name }}
     permissions:
       contents: "read"
       id-token: "write"
@@ -53,9 +54,9 @@ jobs:
           path: |
             ${{ steps.go-cache.outputs.gocache }}
             ${{ steps.go-cache.outputs.gomodcache }}
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-2
 
-      - run: go test ./...
+      - run: make test
       - run: helm lint --strict ./charts
       - run: make staticcheck
       - run: make vulncheck
@@ -103,7 +104,9 @@ jobs:
 
       - name: Push Chart
         run: |-
-          helm push ${{ env.NAME }}*.tgz ${{ env.FEATURE_REPOSITORY }}
+          chart="${{ steps.build_chart.outputs.chart }}"
+          echo "Pushing: $chart"
+          helm push "$chart" ${{ env.FEATURE_REPOSITORY }}
 
   rollout:
     needs:
@@ -114,5 +117,5 @@ jobs:
     steps:
       - uses: nais/fasit-deploy@v2
         with:
-          chart: ${{ env.FEATURE_REPOSITORY }}/${{ env.NAME }}
+          chart: ${{ env.FEATURE_REPOSITORY }}/${{ needs.build_and_push.outputs.name }}
           version: ${{ needs.build_and_push.outputs.version }}
