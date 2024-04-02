@@ -3,9 +3,13 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "*.md"
+      - "*.env"
 env:
   NAME: bqrator
   FEATURE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais/feature
+  CHART_PATH: "charts"
 
 jobs:
   build_and_push:
@@ -19,26 +23,83 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: asdf-vm/actions/setup@v3
+
+      - id: asdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.asdf/
+          key: ${{ runner.os }}-asdf-${{ hashFiles('**/.tool-versions') }}
+
+      - uses: asdf-vm/actions/install@v3
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        with:
+          before_install: |
+            asdf install golang latest
+            asdf global golang latest
+
+      - name: Find go cache dir
+        id: go-cache
+        run: |
+          go version
+          # Clear cache dirs to avoid error when restoring
+          go clean -cache -modcache
+          echo "gocache=$(go env GOCACHE)" >> $GITHUB_OUTPUT
+          echo "gomodcache=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
+
+      - name: Cache go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - run: go test ./...
+      - run: helm lint --strict ./charts
+      - run: make staticcheck
+      - run: make vulncheck
+
+      - name: Check code format and run code generators
+        run: |
+          make fmt
+          git diff --exit-code --name-only
+
+      - id: go_version
+        run: echo "go_version=$(asdf current golang | awk '{print $2}')" >> $GITHUB_OUTPUT
+
       - uses: nais/platform-build-push-sign@main
         id: build-push-sign
         with:
           name: ${{ env.NAME }}
+          build_args: |
+            GO_VERSION=${{ steps.go_version.outputs.go_version }}-
           google_service_account: gh-${{ env.NAME }}
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
 
-      - name: Set image version
-        run: yq e '.image.tag = "${{ steps.build-push-sign.outputs.version }}"' --inplace charts/values.yaml
-
       - uses: azure/setup-helm@v3
         name: "Setup Helm"
         with:
-          version: "v3.12.0"
+          version: "v3.14.2"
 
       - name: Build Chart
+        id: build_chart
         run: |-
-          sed -i "s/^version: .*/version: ${{ steps.build-push-sign.outputs.version }}/g" charts/Chart.yaml
-          helm package charts
+          suffix="$(date +%Y%m%d%H%M%S)"
+          orig_version=$(yq '.version' < "${{ env.CHART_PATH}}/Chart.yaml")
+          new_version="${orig_version}-$suffix"
+
+          sed -i "s/^version: .*/version: $new_version/g" "${{ env.CHART_PATH}}/Chart.yaml"
+          yq e -i '.image.tag = "${{ steps.build-push-sign.outputs.version }}"' "${{ env.CHART_PATH}}/values.yaml"
+
+          helm dependency update "${{ env.CHART_PATH}}"
+          helm package "${{ env.CHART_PATH}}" --destination .
+
+          name=$(yq '.name' "${{ env.CHART_PATH}}/Chart.yaml")
+          echo "name=$name" >> $GITHUB_OUTPUT
+          echo "chart=$name-$new_version.tgz" >> $GITHUB_OUTPUT
+          echo "version=$new_version" >> $GITHUB_OUTPUT
 
       - name: Push Chart
         run: |-

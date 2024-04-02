@@ -40,7 +40,7 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=bqrator crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -155,3 +155,17 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+check: staticcheck vulncheck deadcode
+
+staticcheck:
+	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+deadcode:
+	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
+
+helm-lint:
+	helm lint --strict ./charts

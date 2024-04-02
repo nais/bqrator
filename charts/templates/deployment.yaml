@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    {{- include "bqrator.labels" . | nindent 4 }}
+  name: {{ include "bqrator.name" . }}
+spec:
+  progressDeadlineSeconds: 300
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "bqrator.selectorLabels" . | nindent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+      labels:
+        {{- include "bqrator.labels" . | nindent 8 }}
+      name: {{ include "bqrator.name" . }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - {{ include "bqrator.name" . }}
+                topologyKey: kubernetes.io/hostname
+              weight: 10
+      containers:
+        - image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sleep
+                  - "5"
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: bqrator
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 1069
+            runAsNonRoot: true
+            runAsUser: 1069
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/ssl/certs/java/cacerts
+              name: ca-bundle-jks
+              readOnly: true
+              subPath: ca-bundle.jks
+            - mountPath: /etc/ssl/certs/ca-certificates.crt
+              name: ca-bundle-pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /etc/pki/tls/certs/ca-bundle.crt
+              name: ca-bundle-pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /etc/ssl/ca-bundle.pem
+              name: ca-bundle-pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /etc/pki/tls/cacert.pem
+              name: ca-bundle-pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+              name: ca-bundle-pem
+              readOnly: true
+              subPath: ca-bundle.pem
+            - mountPath: /tmp
+              name: writable-tmp
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: gh-docker-credentials
+        - name: gar-docker-credentials
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1069
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccount: bqrator
+      serviceAccountName: bqrator
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: ca-bundle-jks
+          name: ca-bundle-jks
+        - configMap:
+            defaultMode: 420
+            name: ca-bundle-pem
+          name: ca-bundle-pem
+        - name: writable-tmp
