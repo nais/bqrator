@@ -53,7 +53,7 @@ jobs:
           path: |
             ${{ steps.go-cache.outputs.gocache }}
             ${{ steps.go-cache.outputs.gomodcache }}
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-2
 
       - run: go test ./...
       - run: helm lint --strict ./charts
