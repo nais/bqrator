@@ -5,6 +5,5 @@ values:
   gcpServiceAccount:
     displayName: GCP Service Account
     description: "The GCP service account to use for the application"
-    required: true
-    config:
-      type: string
+    computed:
+      template: "{{ .Env.bqrator_sa }}"
