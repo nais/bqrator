@@ -1,0 +1,19 @@
+apiVersion: networking.gke.io/v1alpha3
+kind: FQDNNetworkPolicy
+metadata:
+  name: {{ include "bqrator.name" . }}
+  labels:
+    {{- include "bqrator.labels" . | nindent 4 }}
+spec:
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - fqdns:
+            - bigquery.googleapis.com
+  podSelector:
+    matchLabels:
+      {{- include "bqrator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
