@@ -1,2 +1,2 @@
-kubebuilder 3.14.0
-golang 1.21.8
+kubebuilder 3.14.1
+golang 1.22.2
