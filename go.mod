@@ -2,6 +2,8 @@ module github.com/nais/bqrator
 
 go 1.22
 
+toolchain go1.22.2
+
 require (
 	cloud.google.com/go/bigquery v1.60.0
 	github.com/google/go-cmp v0.6.0
