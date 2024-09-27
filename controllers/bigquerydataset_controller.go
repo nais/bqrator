@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 
@@ -141,12 +142,13 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 		}
 	}
 
+	access = ensureBQratorOwner(access)
+
 	err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, bigquery.DatasetMetadataToUpdate{
 		Name:        dataset.Spec.Name,
 		Description: dataset.Spec.Description,
 		Access:      access,
 	}, existing.ETag)
-
 	if err != nil {
 		log.Error(err, "unable to update dataset")
 		return err
@@ -225,7 +227,7 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google
 		Name:        dataset.Spec.Name,
 		Location:    dataset.Spec.Location,
 		Description: dataset.Spec.Description,
-		Access:      createAccessList(dataset),
+		Access:      ensureBQratorOwner(createAccessList(dataset)),
 	})
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 409 {
@@ -274,4 +276,23 @@ func removeDeletedServiceAccounts(accessList []*bigquery.AccessEntry) []*bigquer
 	}
 
 	return newAccessList
+}
+
+func ensureBQratorOwner(in []*bigquery.AccessEntry) []*bigquery.AccessEntry {
+	bqratorEmail := os.Getenv("SA_ACCOUNT_EMAIL")
+	if bqratorEmail == "" {
+		return in
+	}
+
+	for _, entry := range in {
+		if entry.Entity == bqratorEmail {
+			return in
+		}
+	}
+
+	return append(in, &bigquery.AccessEntry{
+		Role:       bigquery.OwnerRole,
+		Entity:     bqratorEmail,
+		EntityType: bigquery.UserEmailEntity,
+	})
 }

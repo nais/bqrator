@@ -54,6 +54,9 @@ spec:
             - containerPort: 8080
               name: http
               protocol: TCP
+          env:
+            - name: SA_ACCOUNT_EMAIL
+              value: "{{ .Values.gcpServiceAccount }}"
           readinessProbe:
             failureThreshold: 3
             httpGet:
