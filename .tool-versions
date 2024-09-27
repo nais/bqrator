@@ -1,2 +1,2 @@
 kubebuilder 3.14.1
-golang 1.22.2
+golang 1.23.1
