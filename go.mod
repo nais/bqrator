@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/bigquery v1.66.2
 	github.com/google/go-cmp v0.6.0
 	github.com/nais/liberator v0.0.0-20250206100826-4881250f4681
-	google.golang.org/api v0.218.0
+	google.golang.org/api v0.220.0
 	k8s.io/apimachinery v0.32.1
 	k8s.io/client-go v0.32.1
 	sigs.k8s.io/controller-runtime v0.20.1
@@ -14,7 +14,7 @@ require (
 
 require (
 	cloud.google.com/go v0.118.1 // indirect
-	cloud.google.com/go/auth v0.14.0 // indirect
+	cloud.google.com/go/auth v0.14.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/iam v1.3.1 // indirect
