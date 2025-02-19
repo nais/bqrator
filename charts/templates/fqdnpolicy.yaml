@@ -7,6 +7,12 @@ metadata:
 spec:
   egress:
     - ports:
+      - port: 80
+        protocol: TCP
+      to:
+      - fqdns:
+        - metadata.google.internal
+    - ports:
         - port: 443
           protocol: TCP
       to:
