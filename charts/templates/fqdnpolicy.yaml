@@ -1,7 +1,7 @@
 apiVersion: networking.gke.io/v1alpha3
 kind: FQDNNetworkPolicy
 metadata:
-  name: {{ include "bqrator.name" . }}
+  name: {{ include "bqrator.name" . }}-fqdn
   labels:
     {{- include "bqrator.labels" . | nindent 4 }}
 spec:
