@@ -144,11 +144,18 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 
 	access = ensureBQratorOwner(access)
 
-	err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, bigquery.DatasetMetadataToUpdate{
+	metadata := bigquery.DatasetMetadataToUpdate{
 		Name:        dataset.Spec.Name,
 		Description: dataset.Spec.Description,
 		Access:      access,
-	}, existing.ETag)
+	}
+
+	if metav1.HasLabel(dataset.ObjectMeta, "app") {
+		metadata.SetLabel("app", dataset.GetLabels()["app"])
+	}
+	metadata.SetLabel("team", dataset.GetNamespace())
+
+	err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, metadata, existing.ETag)
 	if err != nil {
 		log.Error(err, "unable to update dataset")
 		return err
@@ -211,8 +218,10 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 
 func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
 	log := log.FromContext(ctx)
+
 	dataset.Status.CreationTime = int(time.Now().Unix())
 	dataset.Status.LastModifiedTime = dataset.Status.CreationTime
+
 	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionTrue,
@@ -222,12 +231,21 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google
 	})
 	dataset.Status.SynchronizationHash = hash
 
+	labels := map[string]string{
+		"team": dataset.GetNamespace(),
+	}
+
+	if metav1.HasLabel(dataset.ObjectMeta, "app") {
+		labels["app"] = dataset.GetLabels()["app"]
+	}
+
 	// TODO(thokra): Fields are optional, but we expect correct values as of now.
 	err := r.bigqueryClient.Create(ctx, dataset.Spec.Project, &bigquery.DatasetMetadata{
 		Name:        dataset.Spec.Name,
 		Location:    dataset.Spec.Location,
 		Description: dataset.Spec.Description,
 		Access:      ensureBQratorOwner(createAccessList(dataset)),
+		Labels:      labels,
 	})
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 409 {
