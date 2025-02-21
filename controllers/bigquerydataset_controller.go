@@ -132,7 +132,8 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 	for _, existingMember := range existingAccess {
 		found := false
 		for _, member := range access {
-			if existingMember.Entity == member.Entity {
+			// Entity will be empty string for view access, so we only compare on entity if it's not empty
+			if existingMember.Entity == member.Entity && member.Entity != "" {
 				found = true
 				break
 			}
