@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -102,7 +103,7 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 		return err
 	}
 
-	if !contains(dataset.Finalizers, finalizer) {
+	if !slices.Contains(dataset.Finalizers, finalizer) {
 		controllerutil.AddFinalizer(&dataset, finalizer)
 		if err := r.Update(ctx, &dataset); err != nil {
 			log.Error(err, "unable to add finalizer")
@@ -181,7 +182,7 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
-	if !contains(dataset.Finalizers, finalizer) {
+	if !slices.Contains(dataset.Finalizers, finalizer) {
 		if err := r.Delete(ctx, &dataset); err != nil {
 			log.Error(err, "unable to delete BigQueryDataset resource")
 			return ctrl.Result{}, err
@@ -275,15 +276,6 @@ func createAccessList(dataset google_nais_io_v1.BigQueryDataset) []*bigquery.Acc
 		})
 	}
 	return access
-}
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 func removeDeletedServiceAccounts(accessList []*bigquery.AccessEntry) []*bigquery.AccessEntry {
