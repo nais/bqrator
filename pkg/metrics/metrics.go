@@ -6,7 +6,7 @@ import (
 
 var (
 	BigQueryDatasetProcessed = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "bqrator_bigquerydataset_processed",
+		Name: "bqrator_bigquerydataset_processed_count",
 		Help: "number of bigquerydataset synchronized",
 	})
 )
