@@ -87,9 +87,7 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	log.Info("Reconciling BigQueryDataset", "name", dataset.Name)
 
 	if !dataset.DeletionTimestamp.IsZero() {
-		result, err := r.onDelete(ctx, dataset)
-		if err != nil {
-		}
+		return r.onDelete(ctx, dataset)
 	}
 
 	if err := r.createOrUpdate(ctx, dataset); err != nil {
