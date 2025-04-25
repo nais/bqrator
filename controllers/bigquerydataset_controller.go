@@ -213,7 +213,7 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
-			log.Info("Ignoring deletion: %v", err)
+			log.Info("Ignoring deletion", "error", err)
 			return ctrl.Result{}, nil
 		}
 	}
