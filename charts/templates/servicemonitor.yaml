@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "bqrator.name" . }}
+  labels:
+    {{- include "bqrator.labels" . | nindent 4 }}
+spec:
+  endpoints:
+  - interval: 1m
+    port: http
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "bqrator.selectorLabels" . | nindent 6 }}
