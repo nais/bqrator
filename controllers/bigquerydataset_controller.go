@@ -79,7 +79,7 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	log.Info("Reconciling BigQueryDataset", "name", dataset.Name)
-	metrics.BigQueryDatasetProcessed.WithLabelValues(dataset.Spec.Project, dataset.Spec.Name).Inc()
+	metrics.BigQueryDatasetProcessed.Inc()
 
 	if !dataset.DeletionTimestamp.IsZero() {
 		return r.onDelete(ctx, dataset)
