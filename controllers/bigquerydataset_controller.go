@@ -26,6 +26,7 @@ import (
 	"cloud.google.com/go/bigquery"
 	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 	"google.golang.org/api/googleapi"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,7 +87,9 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	log.Info("Reconciling BigQueryDataset", "name", dataset.Name)
 
 	if !dataset.DeletionTimestamp.IsZero() {
-		return r.onDelete(ctx, dataset)
+		result, err := r.onDelete(ctx, dataset)
+		if err != nil {
+		}
 	}
 
 	if err := r.createOrUpdate(ctx, dataset); err != nil {
@@ -201,12 +204,19 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 				Reason:             "DeleteError",
 				Message:            "Unable to delete from Google: " + err.Error(),
 			})
+
 			if err := r.Status().Update(ctx, &dataset); err != nil {
 				log.Error(err, "unable to update status when deleting dataset")
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
-			log.Error(err, "unable to delete dataset")
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, err
+
+			if apierrors.IsNotFound(err) {
+				log.Error(err, "unable to delete dataset")
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
+			log.Info("Ignoring deletion: %v", err)
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -215,6 +225,7 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 		log.Error(err, "unable to update BigQueryDataset")
 		return ctrl.Result{}, err
 	}
+
 	return ctrl.Result{}, nil
 }
 
