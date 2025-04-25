@@ -45,13 +45,6 @@ type BigQueryDatasetReconciler struct {
 	bigqueryClient BigQuery
 }
 
-type BigQuery interface {
-	Get(ctx context.Context, projectID, name string) (*bigquery.DatasetMetadata, error)
-	Create(ctx context.Context, projectID string, dataset *bigquery.DatasetMetadata) error
-	Update(ctx context.Context, projectID, name string, dataset bigquery.DatasetMetadataToUpdate, etag string) error
-	Delete(ctx context.Context, projectID, name string) error
-}
-
 func NewBigQueryDatasetReconciler(client client.Client, scheme *runtime.Scheme, bqClient BigQuery) *BigQueryDatasetReconciler {
 	return &BigQueryDatasetReconciler{
 		bigqueryClient: bqClient,

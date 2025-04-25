@@ -84,7 +84,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	bqMgr := controllers.NewBigQueryDatasetReconciler(mgr.GetClient(), mgr.GetScheme(), &bqWrapper{client: bqClient})
+	bqMgr := controllers.NewBigQueryDatasetReconciler(mgr.GetClient(), mgr.GetScheme(), &controllers.BigQueryWrapper{Client: bqClient})
 	if err = bqMgr.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BigQueryDataset")
 		os.Exit(1)
@@ -105,25 +105,4 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-type bqWrapper struct {
-	client *bigquery.Client
-}
-
-func (b *bqWrapper) Get(ctx context.Context, projectID, name string) (*bigquery.DatasetMetadata, error) {
-	return b.client.DatasetInProject(projectID, name).Metadata(ctx)
-}
-
-func (b *bqWrapper) Create(ctx context.Context, projectID string, dataset *bigquery.DatasetMetadata) error {
-	return b.client.DatasetInProject(projectID, dataset.Name).Create(ctx, dataset)
-}
-
-func (b *bqWrapper) Update(ctx context.Context, projectID, name string, dataset bigquery.DatasetMetadataToUpdate, etag string) error {
-	_, err := b.client.DatasetInProject(projectID, name).Update(ctx, dataset, etag)
-	return err
-}
-
-func (b *bqWrapper) Delete(ctx context.Context, projectID, name string) error {
-	return b.client.DatasetInProject(projectID, name).Delete(ctx)
 }
