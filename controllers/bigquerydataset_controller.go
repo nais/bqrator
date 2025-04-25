@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/nais/bqrator/pkg/metrics"
 	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 	"google.golang.org/api/googleapi"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -78,6 +79,7 @@ func (r *BigQueryDatasetReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	log.Info("Reconciling BigQueryDataset", "name", dataset.Name)
+	metrics.BigQueryDatasetProcessed.WithLabelValues(dataset.Spec.Project, dataset.Spec.Name).Inc()
 
 	if !dataset.DeletionTimestamp.IsZero() {
 		return r.onDelete(ctx, dataset)
@@ -110,6 +112,7 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 	} else if currentHash != dataset.Status.SynchronizationHash {
 		return r.onUpdate(ctx, dataset, currentHash)
 	}
+
 	return nil
 }
 

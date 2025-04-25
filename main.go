@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"github.com/nais/bqrator/controllers"
+	"github.com/nais/bqrator/pkg/metrics"
 	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -29,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	runtimemetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	//+kubebuilder:scaffold:imports
@@ -49,6 +51,8 @@ func init() {
 
 	utilruntime.Must(google_nais_io_v1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
+
+	metrics.Register(runtimemetrics.Registry)
 }
 
 func main() {
