@@ -10,7 +10,7 @@ spec:
   - name: "bqrator-reconcilling"
     rules:
     - alert: NotReconcilling
-      expr: rate(bqrator_bigquerydataset_processed_count[1d]) == 0
+      expr: sum(rate(bqrator_bigquerydataset_processed_count[1d])) == 0
       for: 60m
       annotations:
         description: "BQRator haven't reconcilled for the last 25h. Something is fishy."
