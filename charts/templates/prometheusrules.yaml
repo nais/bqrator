@@ -1,0 +1,20 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    {{- include "bqrator.labels" . | nindent 4 }}
+  name: {{ include "bqrator.name" . }}
+spec:
+  groups:
+  - name: "bqrator-reconcilling"
+    rules:
+    - alert: NotReconcilling
+      expr: rate(bqrator_bigquerydataset_processed_count[1d]) == 0
+      for: 60m
+      annotations:
+        description: "BQRator haven't reconcilled for the last 25h. Something is fishy."
+        action: "Check the logs at https://monitoring.nais.io/"
+      labels:
+        severity: warning
+        namespace: nais-system
