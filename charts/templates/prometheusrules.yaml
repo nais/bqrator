@@ -7,14 +7,16 @@ metadata:
   name: {{ include "bqrator.name" . }}
 spec:
   groups:
-  - name: "bqrator-reconcilling"
+  - name: "bqrator"
     rules:
-    - alert: NotReconcilling
-      expr: sum(rate(bqrator_bigquerydataset_processed_count[1d])) == 0
-      for: 60m
+    - alert: BQRatorTooManyErrors
+      expr: sum(log_messages_errors{namespace="nais-system", app="bqrator", level="Error"}) / sum(log_messages_total{namespace="nais-system", app="bqrator"}) > 0.05
+      for: 10m
       annotations:
-        description: "BQRator haven't reconcilled for the last 25h. Something is fishy."
-        action: "Check the logs at https://monitoring.nais.io/"
+        description: "More than 5% of BQRator's logs are errors, that's a bit too many. Something is fishy."
+        action: "Check logs, maybe it's missing some access?"
+
+        dashboard_url: "https://monitoring.nais.io/a/grafana-lokiexplore-app/explore/service/bqrator/logs?from=now-12h&var-ds={{ .Values.fasit.tenant.name }}-management-loki&patterns=%5B%5D&to=now&var-filters=service_name%7C%3D%7Cbqrator&var-fields=&var-levels=&var-metadata=&var-patterns=&var-lineFilterV2=&var-lineFilters=&timezone=browser&var-all-fields=&urlColumns=%5B%5D&visualizationType=%22logs%22&displayedFields=%5B%5D&sortOrder=%22Descending%22&wrapLogMessage=false"
       labels:
         severity: warning
         namespace: nais-system
