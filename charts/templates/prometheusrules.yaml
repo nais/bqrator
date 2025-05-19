@@ -10,7 +10,7 @@ spec:
   - name: "bqrator"
     rules:
     - alert: BQRatorTooManyErrors
-      expr: sum(log_messages_errors{namespace="nais-system", app="bqrator", level="Error"}) / sum(log_messages_total{namespace="nais-system", app="bqrator"}) > 0.05
+      expr: sum(rate(log_messages_errors{namespace="nais-system", app="bqrator", level="Error"}[1h])) / sum(rate(log_messages_total{namespace="nais-system", app="bqrator"}[1h])) > 0.05
       for: 10m
       annotations:
         description: "More than 5% of BQRator's logs are errors, that's a bit too many. Something is fishy."
