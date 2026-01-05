@@ -1,6 +1,6 @@
 module github.com/nais/bqrator
 
-go 1.25.0
+go 1.25.5
 
 tool (
 	golang.org/x/tools/cmd/deadcode
