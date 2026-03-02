@@ -79,3 +79,5 @@ jobs:
         with:
           chart: ${{ env.FEATURE_REPOSITORY }}/${{ needs.build_and_push.outputs.name }}
           version: ${{ needs.build_and_push.outputs.version }}
+          google_service_account: gh-${{ env.NAME }}
+          workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
