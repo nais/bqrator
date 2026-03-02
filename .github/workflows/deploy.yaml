@@ -78,7 +78,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: nais/fasit-deploy@v2
+      - uses: nais/fasit-deploy@v3
         with:
           chart: ${{ env.FEATURE_REPOSITORY }}/${{ needs.build_and_push.outputs.name }}
           version: ${{ needs.build_and_push.outputs.version }}
