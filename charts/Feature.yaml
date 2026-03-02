@@ -1,5 +1,7 @@
+target:
+  kind: tenant
+
 environmentKinds:
-  - "legacy"
   - "tenant"
 
 values:
