@@ -1,0 +1,115 @@
+[env]
+IMG = "ghcr.io/nais/bqrator:1"
+ENVTEST_K8S_VERSION = "1.33.0"
+
+[tools]
+go = "1.26.0"
+kubebuilder = "3.15.1"
+kustomize = "5.1.1"
+"go:sigs.k8s.io/controller-tools/cmd/controller-gen" = "latest"
+"go:sigs.k8s.io/controller-runtime/tools/setup-envtest" = "release-0.23"
+
+[tasks.generate]
+description = "Generate all"
+depends = ['generate:manifests', 'generate:deepcopy']
+
+[tasks."generate:manifests"]
+description = "Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects"
+run = "controller-gen rbac:roleName=bqrator crd webhook paths='./...' output:crd:artifacts:config=config/crd/bases"
+
+[tasks."generate:deepcopy"]
+description = "Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations"
+run = 'controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+
+[tasks."check"]
+description = "Run all static analysis tools"
+depends = [
+  'fmt',
+  'check:staticcheck',
+  'check:vulncheck',
+  'check:deadcode',
+  'check:vet',
+  'check:helm-lint',
+]
+
+[tasks."check:deadcode"]
+description = "Run deadcode"
+run = "go tool golang.org/x/tools/cmd/deadcode -test ./..."
+
+[tasks."check:gosec"]
+description = "Run gosec"
+run = "go tool github.com/securego/gosec/v2/cmd/gosec --exclude-generated -terse ./..."
+
+[tasks."check:staticcheck"]
+description = "Run staticcheck"
+run = "go tool honnef.co/go/tools/cmd/staticcheck ./..."
+
+[tasks."check:vulncheck"]
+description = "Run vulncheck"
+run = "go tool golang.org/x/vuln/cmd/govulncheck ./..."
+
+[tasks."check:vet"]
+description = "Run go vet"
+wait_for = ['fmt']
+run = "go vet ./..."
+
+[tasks."check:helm-lint"]
+description = "Lint helm chart"
+run = "helm lint --strict ./charts"
+
+[tasks."fmt"]
+description = "Format all code"
+depends = ['fmt:go', 'fmt:gofix']
+
+[tasks."fmt:go"]
+description = "Format go code using gofumpt"
+run = "go tool mvdan.cc/gofumpt -w ./"
+
+[tasks."fmt:gofix"]
+description = "Fix runs the Go fix tool (cmd/fix) on the named packages and applies suggested fixes."
+run = "go fix ./..."
+
+[tasks.test]
+description = "Run tests"
+run = 'KUBEBUILDER_ASSETS="$(pwd)/$(setup-envtest use $ENVTEST_K8S_VERSION --bin-dir bin -p path)" go test ./... -coverprofile cover.out'
+
+[tasks."local:build"]
+description = "Build manager binary"
+depends = ["generate", "fmt", "vet"]
+run = "go build -o bin/manager main.go"
+
+[tasks."local:run"]
+description = "Run a controller from your host"
+depends = ["generate", "fmt", "vet"]
+run = "go run ./main.go"
+
+[tasks."docker:build"]
+description = "Build docker image with the manager"
+depends = ["test"]
+run = "docker build -t $IMG ."
+
+[tasks."docker:push"]
+description = "Push docker image with the manager"
+run = "docker push $IMG"
+
+[tasks."k8s:install"]
+description = "Install CRDs into the K8s cluster specified in ~/.kube/config"
+depends = ["generate:manifests"]
+run = "kustomize build config/crd | kubectl apply -f -"
+
+[tasks."k8s:uninstall"]
+description = "Uninstall CRDs from the K8s cluster"
+depends = ["generate:manifests"]
+run = "kustomize build config/crd | kubectl delete --ignore-not-found=${ignore_not_found:-false} -f -"
+
+[tasks."k8s:deploy"]
+description = "Deploy controller to the K8s cluster"
+depends = ["generate:manifests"]
+run = """
+(cd config/manager && kustomize edit set image controller=$IMG)
+kustomize build config/default | kubectl apply -f -
+"""
+
+[tasks."k8s:undeploy"]
+description = "Undeploy controller from the K8s cluster"
+run = "kustomize build config/default | kubectl delete --ignore-not-found=${ignore_not_found:-false} -f -"

@@ -294,7 +294,7 @@ func TestRemoveDeletedServiceAccounts(t *testing.T) {
 }
 
 func eventually(delay time.Duration, maxIterations int, f func() bool) bool {
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		if f() {
 			return true
 		}
