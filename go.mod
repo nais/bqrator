@@ -1,6 +1,6 @@
 module github.com/nais/bqrator
 
-go 1.26.0
+go 1.26.2
 
 tool (
 	github.com/securego/gosec/v2/cmd/gosec
