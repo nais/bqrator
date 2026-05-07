@@ -66,7 +66,7 @@ jobs:
           echo "Pushing: $chart"
           helm push "$chart" ${{ env.FEATURE_REPOSITORY }}
 
-  rollout:
+  deploy:
     needs:
       - build_and_push
     runs-on: fasit-deploy
