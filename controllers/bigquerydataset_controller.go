@@ -121,6 +121,11 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 
 	existing, err := r.bigqueryClient.Get(ctx, dataset.Spec.Project, dataset.Spec.Name)
 	if err != nil {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 404 {
+			log.Info("Dataset not found in GCP, recreating")
+			dataset.Status.CreationTime = 0
+			return r.onCreate(ctx, dataset, hash)
+		}
 		log.Error(err, "Unable to fetch existing dataset")
 		return err
 	}
