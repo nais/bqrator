@@ -15,7 +15,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/nais/liberator v0.0.0-20260427164122-32a87a675142
 	github.com/prometheus/client_golang v1.23.2
-	google.golang.org/api v0.281.0
+	google.golang.org/api v0.283.0
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
 	sigs.k8s.io/controller-runtime v0.24.1
