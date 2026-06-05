@@ -182,18 +182,18 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 }
 
 func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("name", dataset.Name)
 
 	if !slices.Contains(dataset.Finalizers, finalizer) {
 		if err := r.Delete(ctx, &dataset); err != nil {
 			log.Error(err, "unable to delete BigQueryDataset resource")
 			return ctrl.Result{}, err
 		}
-		log.Info("Deleted BigQueryDataset", "name", dataset.Name)
+		log.Info("Deleted BigQueryDataset")
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("Deleting BigQueryDataset", "name", dataset.Name)
+	log.Info("Deleting BigQueryDataset")
 	if dataset.Spec.CascadingDelete {
 		if err := r.bigqueryClient.Delete(ctx, dataset.Spec.Project, dataset.Spec.Name); err != nil {
 			meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
