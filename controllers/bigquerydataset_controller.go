@@ -209,13 +209,12 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
-			if apierrors.IsNotFound(err) {
-				log.Error(err, "unable to delete dataset")
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			if !apierrors.IsNotFound(err) {
+				log.Info("Ignoring deletion", "error", err)
+				return ctrl.Result{}, nil
 			}
 
-			log.Info("Ignoring deletion", "error", err)
-			return ctrl.Result{}, nil
+			log.Info("unable to delete dataset, not found", "error", err)
 		}
 	}
 
@@ -251,7 +250,6 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google
 		labels["app"] = dataset.GetLabels()["app"]
 	}
 
-	// TODO(thokra): Fields are optional, but we expect correct values as of now.
 	err := r.bigqueryClient.Create(ctx, dataset.Spec.Project, &bigquery.DatasetMetadata{
 		Name:        dataset.Spec.Name,
 		Location:    dataset.Spec.Location,
