@@ -27,7 +27,6 @@ import (
 	"github.com/nais/bqrator/pkg/metrics"
 	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 	"google.golang.org/api/googleapi"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -209,12 +208,12 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
-			if !apierrors.IsNotFound(err) {
-				log.Info("Ignoring deletion", "error", err)
+			if gerr, ok := err.(*googleapi.Error); ok && gerr.Code != 404 {
+				log.Info("Unable to delete dataset", "error", err)
 				return ctrl.Result{}, nil
 			}
 
-			log.Info("unable to delete dataset, not found", "error", err)
+			log.Info("Dataset not found in GCP, removing finalizer")
 		}
 	}
 
