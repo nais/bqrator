@@ -75,7 +75,7 @@ run = 'KUBEBUILDER_ASSETS="$(pwd)/$(setup-envtest use $ENVTEST_K8S_VERSION --bin
 
 [tasks."local:build"]
 description = "Build manager binary"
-depends = ["generate", "fmt", "vet"]
+depends = ["generate", "fmt", "check:vet"]
 run = "go build -o bin/manager main.go"
 
 [tasks."local:run"]

@@ -23,3 +23,5 @@ testbin/*
 *.swp
 *.swo
 *~
+/misc/
+/ARCHITECTURE.md

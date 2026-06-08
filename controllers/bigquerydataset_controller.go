@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -158,11 +159,16 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 	}
 	metadata.SetLabel("team", dataset.GetNamespace())
 
-	err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, metadata, existing.ETag)
-	if err != nil {
-		log.Error(err, "unable to update dataset")
-		return err
+	if metadataEqual(dataset, existing, access) {
+		log.Info("No-op update detected, skipping GCP update call")
+	} else {
+		err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, metadata, existing.ETag)
+		if err != nil {
+			log.Error(err, "unable to update dataset")
+			return err
+		}
 	}
+
 	dataset.Status.LastModifiedTime = int(time.Now().Unix())
 	meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
 		Type:               "Ready",
@@ -178,6 +184,73 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 		return err
 	}
 	return nil
+}
+
+// metadataEqual returns true when the desired state derived from the k8s resource
+// (and the already-merged computedAccess list) is identical to the current GCP state.
+// When it returns true, the BigQuery Update API call can be skipped.
+func metadataEqual(dataset google_nais_io_v1.BigQueryDataset, existing *bigquery.DatasetMetadata, computedAccess []*bigquery.AccessEntry) bool {
+	if dataset.Spec.Name != existing.Name {
+		return false
+	}
+	if dataset.Spec.Description != existing.Description {
+		return false
+	}
+	if !accessSetEqual(computedAccess, existing.Access) {
+		return false
+	}
+	if existing.Labels["team"] != dataset.GetNamespace() {
+		return false
+	}
+	if metav1.HasLabel(dataset.ObjectMeta, "app") {
+		if existing.Labels["app"] != dataset.GetLabels()["app"] {
+			return false
+		}
+	}
+	return true
+}
+
+// accessSubEntity returns a string that uniquely identifies the sub-entity of
+// an AccessEntry for ViewEntity, RoutineEntity, and DatasetEntity types, whose
+// Entity field is always empty. Returns "" for standard entity types.
+func accessSubEntity(e *bigquery.AccessEntry) string {
+	if e.View != nil {
+		return fmt.Sprintf("%s/%s/%s", e.View.ProjectID, e.View.DatasetID, e.View.TableID)
+	}
+	if e.Routine != nil {
+		return fmt.Sprintf("%s/%s/%s", e.Routine.ProjectID, e.Routine.DatasetID, e.Routine.RoutineID)
+	}
+	if e.Dataset != nil && e.Dataset.Dataset != nil {
+		types := slices.Clone(e.Dataset.TargetTypes)
+		slices.Sort(types)
+		return fmt.Sprintf("%s/%s/%s", e.Dataset.Dataset.ProjectID, e.Dataset.Dataset.DatasetID, strings.Join(types, ","))
+	}
+	return ""
+}
+
+// accessSetEqual reports whether a and b contain the same access entries,
+// regardless of order. Entries are compared by Role, EntityType, Entity, and
+// SubEntity (for View, Routine, and Dataset grants where Entity is always "").
+func accessSetEqual(a, b []*bigquery.AccessEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	type key struct {
+		Role       bigquery.AccessRole
+		EntityType bigquery.EntityType
+		Entity     string
+		SubEntity  string
+	}
+	set := make(map[key]struct{}, len(a))
+	for _, entry := range a {
+		set[key{entry.Role, entry.EntityType, entry.Entity, accessSubEntity(entry)}] = struct{}{}
+	}
+	for _, entry := range b {
+		if _, ok := set[key{entry.Role, entry.EntityType, entry.Entity, accessSubEntity(entry)}]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset) (ctrl.Result, error) {
