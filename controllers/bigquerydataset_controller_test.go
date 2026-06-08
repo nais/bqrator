@@ -245,7 +245,7 @@ func TestBigqueryDatasetControllerDelete(t *testing.T) {
 		return !bqMock.HasDataset(dataset.Spec.Project, dataset.Spec.Name)
 	})
 	if !gotten {
-		t.Fatalf("Failed delete datset from state")
+		t.Fatalf("Failed delete dataset from state")
 	}
 }
 
