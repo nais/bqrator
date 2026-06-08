@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -209,8 +210,27 @@ func metadataEqual(dataset google_nais_io_v1.BigQueryDataset, existing *bigquery
 	return true
 }
 
+// accessSubEntity returns a string that uniquely identifies the sub-entity of
+// an AccessEntry for ViewEntity, RoutineEntity, and DatasetEntity types, whose
+// Entity field is always empty. Returns "" for standard entity types.
+func accessSubEntity(e *bigquery.AccessEntry) string {
+	if e.View != nil {
+		return fmt.Sprintf("%s/%s/%s", e.View.ProjectID, e.View.DatasetID, e.View.TableID)
+	}
+	if e.Routine != nil {
+		return fmt.Sprintf("%s/%s/%s", e.Routine.ProjectID, e.Routine.DatasetID, e.Routine.RoutineID)
+	}
+	if e.Dataset != nil && e.Dataset.Dataset != nil {
+		types := slices.Clone(e.Dataset.TargetTypes)
+		slices.Sort(types)
+		return fmt.Sprintf("%s/%s/%s", e.Dataset.Dataset.ProjectID, e.Dataset.Dataset.DatasetID, strings.Join(types, ","))
+	}
+	return ""
+}
+
 // accessSetEqual reports whether a and b contain the same access entries,
-// regardless of order. Entries are compared by Role, EntityType, and Entity.
+// regardless of order. Entries are compared by Role, EntityType, Entity, and
+// SubEntity (for View, Routine, and Dataset grants where Entity is always "").
 func accessSetEqual(a, b []*bigquery.AccessEntry) bool {
 	if len(a) != len(b) {
 		return false
@@ -219,13 +239,14 @@ func accessSetEqual(a, b []*bigquery.AccessEntry) bool {
 		Role       bigquery.AccessRole
 		EntityType bigquery.EntityType
 		Entity     string
+		SubEntity  string
 	}
 	set := make(map[key]struct{}, len(a))
 	for _, entry := range a {
-		set[key{entry.Role, entry.EntityType, entry.Entity}] = struct{}{}
+		set[key{entry.Role, entry.EntityType, entry.Entity, accessSubEntity(entry)}] = struct{}{}
 	}
 	for _, entry := range b {
-		if _, ok := set[key{entry.Role, entry.EntityType, entry.Entity}]; !ok {
+		if _, ok := set[key{entry.Role, entry.EntityType, entry.Entity, accessSubEntity(entry)}]; !ok {
 			return false
 		}
 	}

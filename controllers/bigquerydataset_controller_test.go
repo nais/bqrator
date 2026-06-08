@@ -467,6 +467,30 @@ func TestAccessSetEqual(t *testing.T) {
 	entry := func(role, entity string) *bigquery.AccessEntry {
 		return &bigquery.AccessEntry{Role: bigquery.AccessRole(role), EntityType: bigquery.UserEmailEntity, Entity: entity}
 	}
+	viewEntry := func(role, projectID, datasetID, tableID string) *bigquery.AccessEntry {
+		return &bigquery.AccessEntry{
+			Role:       bigquery.AccessRole(role),
+			EntityType: bigquery.ViewEntity,
+			View:       &bigquery.Table{ProjectID: projectID, DatasetID: datasetID, TableID: tableID},
+		}
+	}
+	routineEntry := func(role, projectID, datasetID, routineID string) *bigquery.AccessEntry {
+		return &bigquery.AccessEntry{
+			Role:       bigquery.AccessRole(role),
+			EntityType: bigquery.RoutineEntity,
+			Routine:    &bigquery.Routine{ProjectID: projectID, DatasetID: datasetID, RoutineID: routineID},
+		}
+	}
+	datasetEntry := func(role, projectID, datasetID string, targetTypes []string) *bigquery.AccessEntry {
+		return &bigquery.AccessEntry{
+			Role:       bigquery.AccessRole(role),
+			EntityType: bigquery.DatasetEntity,
+			Dataset: &bigquery.DatasetAccessEntry{
+				Dataset:     &bigquery.Dataset{ProjectID: projectID, DatasetID: datasetID},
+				TargetTypes: targetTypes,
+			},
+		}
+	}
 
 	t.Run("both nil", func(t *testing.T) {
 		if !accessSetEqual(nil, nil) {
@@ -492,6 +516,92 @@ func TestAccessSetEqual(t *testing.T) {
 		b := []*bigquery.AccessEntry{entry("WRITER", "u@x.com")}
 		if accessSetEqual(a, b) {
 			t.Error("expected not equal")
+		}
+	})
+	t.Run("identical view grant lists are equal", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{
+			viewEntry("READER", "proj", "ds", "viewA"),
+			viewEntry("READER", "proj", "ds", "viewB"),
+		}
+		b := []*bigquery.AccessEntry{
+			viewEntry("READER", "proj", "ds", "viewA"),
+			viewEntry("READER", "proj", "ds", "viewB"),
+		}
+		if !accessSetEqual(a, b) {
+			t.Error("expected equal")
+		}
+	})
+	t.Run("view grants differing in one view are not equal", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{
+			viewEntry("READER", "proj", "ds", "viewA"),
+			viewEntry("READER", "proj", "ds", "viewB"),
+		}
+		b := []*bigquery.AccessEntry{
+			viewEntry("READER", "proj", "ds", "viewA"),
+			viewEntry("READER", "proj", "ds", "viewC"),
+		}
+		if accessSetEqual(a, b) {
+			t.Error("expected not equal")
+		}
+	})
+	t.Run("identical routine grant lists are equal", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{
+			routineEntry("READER", "proj", "ds", "routineA"),
+			routineEntry("READER", "proj", "ds", "routineB"),
+		}
+		b := []*bigquery.AccessEntry{
+			routineEntry("READER", "proj", "ds", "routineA"),
+			routineEntry("READER", "proj", "ds", "routineB"),
+		}
+		if !accessSetEqual(a, b) {
+			t.Error("expected equal")
+		}
+	})
+	t.Run("routine grants differing in routine ID are not equal", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{
+			routineEntry("READER", "proj", "ds", "routineA"),
+		}
+		b := []*bigquery.AccessEntry{
+			routineEntry("READER", "proj", "ds", "routineB"),
+		}
+		if accessSetEqual(a, b) {
+			t.Error("expected not equal")
+		}
+	})
+	t.Run("identical dataset grant lists are equal", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{
+			datasetEntry("READER", "proj", "dsA", []string{"VIEWS"}),
+		}
+		b := []*bigquery.AccessEntry{
+			datasetEntry("READER", "proj", "dsA", []string{"VIEWS"}),
+		}
+		if !accessSetEqual(a, b) {
+			t.Error("expected equal")
+		}
+	})
+	t.Run("dataset grants differing in dataset ID are not equal", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{
+			datasetEntry("READER", "proj", "dsA", []string{"VIEWS"}),
+		}
+		b := []*bigquery.AccessEntry{
+			datasetEntry("READER", "proj", "dsB", []string{"VIEWS"}),
+		}
+		if accessSetEqual(a, b) {
+			t.Error("expected not equal")
+		}
+	})
+	t.Run("dataset entry with nil inner Dataset does not panic and compares equal", func(t *testing.T) {
+		nilDataset := func(role string) *bigquery.AccessEntry {
+			return &bigquery.AccessEntry{
+				Role:       bigquery.AccessRole(role),
+				EntityType: bigquery.DatasetEntity,
+				Dataset:    &bigquery.DatasetAccessEntry{Dataset: nil},
+			}
+		}
+		a := []*bigquery.AccessEntry{nilDataset("READER")}
+		b := []*bigquery.AccessEntry{nilDataset("READER")}
+		if !accessSetEqual(a, b) {
+			t.Error("expected equal (both have nil inner Dataset)")
 		}
 	})
 }
