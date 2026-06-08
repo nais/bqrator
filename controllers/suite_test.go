@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -105,10 +106,14 @@ func setupBigQueryDatasetController(ctx context.Context) {
 }
 
 type bqMocker struct {
-	state map[string]*bigquery.DatasetMetadata
+	mu          sync.Mutex
+	state       map[string]*bigquery.DatasetMetadata
+	updateCount int
 }
 
 func (b *bqMocker) Get(ctx context.Context, projectID, name string) (*bigquery.DatasetMetadata, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	fmt.Println("GET", projectID, name)
 	dm, ok := b.state[projectID+"_"+name]
 	if !ok {
@@ -118,6 +123,8 @@ func (b *bqMocker) Get(ctx context.Context, projectID, name string) (*bigquery.D
 }
 
 func (b *bqMocker) Create(ctx context.Context, projectID string, dataset *bigquery.DatasetMetadata) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	fmt.Println("CREATE", projectID, dataset.Name)
 	if _, ok := b.state[projectID+"_"+dataset.Name]; ok {
 		return &googleapi.Error{
@@ -130,7 +137,10 @@ func (b *bqMocker) Create(ctx context.Context, projectID string, dataset *bigque
 }
 
 func (b *bqMocker) Update(ctx context.Context, projectID, name string, dataset bigquery.DatasetMetadataToUpdate, etag string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	fmt.Println("UPDATE", projectID, name)
+	b.updateCount++
 	dm, ok := b.state[projectID+"_"+name]
 	if !ok {
 		return fmt.Errorf("dataset not found")
@@ -154,7 +164,22 @@ func (b *bqMocker) Update(ctx context.Context, projectID, name string, dataset b
 	return nil
 }
 
+func (b *bqMocker) GetUpdateCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.updateCount
+}
+
+func (b *bqMocker) HasDataset(project, name string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	_, ok := b.state[project+"_"+name]
+	return ok
+}
+
 func (b *bqMocker) Delete(ctx context.Context, projectID, name string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	fmt.Println("DELETE", projectID, name)
 	if _, ok := b.state[projectID+"_"+name]; !ok {
 		return fmt.Errorf("dataset not found")

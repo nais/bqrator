@@ -242,8 +242,7 @@ func TestBigqueryDatasetControllerDelete(t *testing.T) {
 	}
 
 	gotten = eventually(100*time.Millisecond, 10, func() bool {
-		_, ok := bqMock.state[dataset.Spec.Project+"_"+dataset.Spec.Name]
-		return !ok
+		return !bqMock.HasDataset(dataset.Spec.Project, dataset.Spec.Name)
 	})
 	if !gotten {
 		t.Fatalf("Failed delete datset from state")
@@ -289,6 +288,210 @@ func TestRemoveDeletedServiceAccounts(t *testing.T) {
 		actual := removeDeletedServiceAccounts(existing)
 		if !cmp.Equal(expected, actual) {
 			t.Error(cmp.Diff(expected, actual))
+		}
+	})
+}
+
+func TestBigqueryDatasetControllerCascadingDeleteOnlyChange(t *testing.T) {
+	ctx := context.Background()
+
+	dataset := naisv1.BigQueryDataset{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cascading-noop",
+			Namespace: "default",
+		},
+		Spec: naisv1.BigQueryDatasetSpec{
+			Name:            "test-cascading-noop-dataset",
+			Description:     "test description",
+			Location:        "europe-north1",
+			Project:         "gcpproject",
+			CascadingDelete: false,
+		},
+	}
+
+	if err := k8sClient.Create(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to create dataset: %v", err)
+	}
+
+	// Wait for initial reconcile to complete (CreationTime set means onCreate ran)
+	var err error
+	gotten := eventually(100*time.Millisecond, 10, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.CreationTime > 0
+	})
+	if err != nil {
+		t.Fatalf("Failed to get dataset after creation: %v", err)
+	} else if !gotten {
+		t.Fatal("Dataset never reached Created state")
+	}
+
+	// Record the update count after initial creation (onCreate uses Create, not Update)
+	updateCountAfterCreate := bqMock.GetUpdateCount()
+
+	// Change only CascadingDelete — this must not trigger a GCP Update call
+	creationHash := dataset.Status.SynchronizationHash
+	dataset.Spec.CascadingDelete = true
+	if err := k8sClient.Update(ctx, &dataset); err != nil {
+		t.Fatalf("Failed to update dataset with CascadingDelete=true: %v", err)
+	}
+
+	// Wait for the controller to reconcile and update the hash in status
+	gotten = eventually(100*time.Millisecond, 15, func() bool {
+		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: dataset.Namespace, Name: dataset.Name}, &dataset)
+		return err == nil && dataset.Status.SynchronizationHash != creationHash
+	})
+	if err != nil {
+		t.Fatalf("Failed to get dataset after CascadingDelete change: %v", err)
+	} else if !gotten {
+		t.Fatal("SynchronizationHash was never updated after CascadingDelete-only change")
+	}
+
+	// The GCP Update must NOT have been called — only CascadingDelete changed, which
+	// has no effect on the BigQuery dataset itself.
+	if bqMock.GetUpdateCount() != updateCountAfterCreate {
+		t.Errorf("expected no GCP Update call for a CascadingDelete-only change, but updateCount changed from %d to %d",
+			updateCountAfterCreate, bqMock.GetUpdateCount())
+	}
+}
+
+func TestMetadataEqual(t *testing.T) {
+	makeDataset := func(name, ns, desc string, appLabel string, access []naisv1.DatasetAccess) naisv1.BigQueryDataset {
+		labels := map[string]string{}
+		if appLabel != "" {
+			labels["app"] = appLabel
+		}
+		return naisv1.BigQueryDataset{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
+			Spec: naisv1.BigQueryDatasetSpec{
+				Name:        name,
+				Description: desc,
+				Access:      access,
+			},
+		}
+	}
+
+	baseAccess := []*bigquery.AccessEntry{
+		{Role: "READER", EntityType: bigquery.UserEmailEntity, Entity: "user@example.com"},
+	}
+	baseExisting := &bigquery.DatasetMetadata{
+		Name:        "ds",
+		Description: "desc",
+		Access:      baseAccess,
+		Labels:      map[string]string{"team": "myns"},
+	}
+	baseDataset := makeDataset("ds", "myns", "desc", "", []naisv1.DatasetAccess{
+		{Role: "READER", UserByEmail: "user@example.com"},
+	})
+
+	t.Run("equal when nothing changed", func(t *testing.T) {
+		if !metadataEqual(baseDataset, baseExisting, baseAccess) {
+			t.Error("expected equal")
+		}
+	})
+
+	t.Run("not equal when name differs", func(t *testing.T) {
+		other := *baseExisting
+		other.Name = "other"
+		if metadataEqual(baseDataset, &other, baseAccess) {
+			t.Error("expected not equal")
+		}
+	})
+
+	t.Run("not equal when description differs", func(t *testing.T) {
+		other := *baseExisting
+		other.Description = "changed"
+		if metadataEqual(baseDataset, &other, baseAccess) {
+			t.Error("expected not equal")
+		}
+	})
+
+	t.Run("not equal when access differs", func(t *testing.T) {
+		otherAccess := []*bigquery.AccessEntry{
+			{Role: "WRITER", EntityType: bigquery.UserEmailEntity, Entity: "other@example.com"},
+		}
+		if metadataEqual(baseDataset, baseExisting, otherAccess) {
+			t.Error("expected not equal")
+		}
+	})
+
+	t.Run("equal with access in different order", func(t *testing.T) {
+		twoAccess := []*bigquery.AccessEntry{
+			{Role: "READER", EntityType: bigquery.UserEmailEntity, Entity: "a@example.com"},
+			{Role: "WRITER", EntityType: bigquery.UserEmailEntity, Entity: "b@example.com"},
+		}
+		existing := &bigquery.DatasetMetadata{
+			Name: "ds", Description: "desc",
+			Access: []*bigquery.AccessEntry{
+				{Role: "WRITER", EntityType: bigquery.UserEmailEntity, Entity: "b@example.com"},
+				{Role: "READER", EntityType: bigquery.UserEmailEntity, Entity: "a@example.com"},
+			},
+			Labels: map[string]string{"team": "myns"},
+		}
+		if !metadataEqual(baseDataset, existing, twoAccess) {
+			t.Error("expected equal (order-insensitive)")
+		}
+	})
+
+	t.Run("not equal when team label differs", func(t *testing.T) {
+		other := *baseExisting
+		other.Labels = map[string]string{"team": "wrongns"}
+		if metadataEqual(baseDataset, &other, baseAccess) {
+			t.Error("expected not equal")
+		}
+	})
+
+	t.Run("not equal when app label differs", func(t *testing.T) {
+		ds := makeDataset("ds", "myns", "desc", "myapp", []naisv1.DatasetAccess{
+			{Role: "READER", UserByEmail: "user@example.com"},
+		})
+		other := *baseExisting
+		other.Labels = map[string]string{"team": "myns", "app": "otherapp"}
+		if metadataEqual(ds, &other, baseAccess) {
+			t.Error("expected not equal")
+		}
+	})
+
+	t.Run("equal when app label matches", func(t *testing.T) {
+		ds := makeDataset("ds", "myns", "desc", "myapp", []naisv1.DatasetAccess{
+			{Role: "READER", UserByEmail: "user@example.com"},
+		})
+		other := *baseExisting
+		other.Labels = map[string]string{"team": "myns", "app": "myapp"}
+		if !metadataEqual(ds, &other, baseAccess) {
+			t.Error("expected equal")
+		}
+	})
+}
+
+func TestAccessSetEqual(t *testing.T) {
+	entry := func(role, entity string) *bigquery.AccessEntry {
+		return &bigquery.AccessEntry{Role: bigquery.AccessRole(role), EntityType: bigquery.UserEmailEntity, Entity: entity}
+	}
+
+	t.Run("both nil", func(t *testing.T) {
+		if !accessSetEqual(nil, nil) {
+			t.Error("expected equal")
+		}
+	})
+	t.Run("same single entry", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{entry("READER", "u@x.com")}
+		b := []*bigquery.AccessEntry{entry("READER", "u@x.com")}
+		if !accessSetEqual(a, b) {
+			t.Error("expected equal")
+		}
+	})
+	t.Run("different length", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{entry("READER", "u@x.com")}
+		var b []*bigquery.AccessEntry
+		if accessSetEqual(a, b) {
+			t.Error("expected not equal")
+		}
+	})
+	t.Run("different role", func(t *testing.T) {
+		a := []*bigquery.AccessEntry{entry("READER", "u@x.com")}
+		b := []*bigquery.AccessEntry{entry("WRITER", "u@x.com")}
+		if accessSetEqual(a, b) {
+			t.Error("expected not equal")
 		}
 	})
 }
