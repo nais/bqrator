@@ -28,9 +28,11 @@ import (
 	"github.com/nais/bqrator/pkg/metrics"
 	google_nais_io_v1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 	"google.golang.org/api/googleapi"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -64,6 +66,7 @@ func (r *BigQueryDatasetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=google.nais.io,resources=bigquerydatasets/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=namespaces,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -107,6 +110,13 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 		}
 	}
 
+	gcpProjectID, err := r.getProjectIDFromNamespace(ctx, dataset.Namespace)
+	if err != nil {
+		return err
+	}
+
+	dataset.Spec.Project = gcpProjectID
+
 	if dataset.Status.CreationTime == 0 {
 		return r.onCreate(ctx, dataset, currentHash)
 	} else if currentHash != dataset.Status.SynchronizationHash {
@@ -114,6 +124,23 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 	}
 
 	return nil
+}
+
+func (r *BigQueryDatasetReconciler) getProjectIDFromNamespace(ctx context.Context, namespace string) (string, error) {
+	ns := &corev1.Namespace{}
+	if err := r.Get(ctx, types.NamespacedName{Name: namespace}, ns); err != nil {
+		return "", err
+	}
+
+	projectID, ok := ns.Labels["google-cloud-project"]
+	if !ok {
+		projectID, ok = ns.Annotations["cnrm.cloud.google.com/project-id"]
+		if !ok {
+			return "", fmt.Errorf("both google-cloud-project and cnrm.cloud.google.com/project-id is missing, can't find GCP project id")
+		}
+	}
+
+	return projectID, nil
 }
 
 func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
@@ -265,9 +292,14 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 		return ctrl.Result{}, nil
 	}
 
+	gcpProject, err := r.getProjectIDFromNamespace(ctx, dataset.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	log.Info("Deleting BigQueryDataset")
 	if dataset.Spec.CascadingDelete {
-		if err := r.bigqueryClient.Delete(ctx, dataset.Spec.Project, dataset.Spec.Name); err != nil {
+		if err := r.bigqueryClient.Delete(ctx, gcpProject, dataset.Spec.Name); err != nil {
 			meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
 				Type:               "Ready",
 				Status:             metav1.ConditionFalse,

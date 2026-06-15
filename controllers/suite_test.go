@@ -29,6 +29,8 @@ import (
 	naisv1 "github.com/nais/liberator/pkg/apis/google.nais.io/v1"
 	"github.com/nais/liberator/pkg/crd"
 	"google.golang.org/api/googleapi"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,6 +50,11 @@ var (
 	bqMock    = &bqMocker{
 		state: map[string]*bigquery.DatasetMetadata{},
 	}
+)
+
+const (
+	defaultNamespace    = "default"
+	defaultGCPProjectID = "gcproject"
 )
 
 func TestMain(m *testing.M) {
@@ -72,6 +79,18 @@ func TestMain(m *testing.M) {
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Label namespace with GCP project for auth
+	ns := &corev1.Namespace{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: defaultNamespace}, ns); err != nil {
+		log.Fatal(err)
+	}
+
+	ns.Labels["google-cloud-project"] = defaultGCPProjectID
+
+	if err := k8sClient.Update(ctx, ns); err != nil {
 		log.Fatal(err)
 	}
 
