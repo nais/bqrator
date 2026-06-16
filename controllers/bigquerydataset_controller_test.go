@@ -19,7 +19,7 @@ func TestBigqueryDatasetController(t *testing.T) {
 	dataset := naisv1.BigQueryDataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-set",
-			Namespace: "default",
+			Namespace: defaultNamespace,
 		},
 		Spec: naisv1.BigQueryDatasetSpec{
 			Name:        "test-dataset",
@@ -31,7 +31,6 @@ func TestBigqueryDatasetController(t *testing.T) {
 					UserByEmail: "test@helper.dev",
 				},
 			},
-			Project:         "gcpproject",
 			CascadingDelete: true,
 		},
 	}
@@ -68,7 +67,7 @@ func TestBigqueryDatasetController(t *testing.T) {
 func TestBigqueryDatasetControllerAlreadyExistsInGCP(t *testing.T) {
 	ctx := context.Background()
 
-	bqMock.Create(ctx, "gcpproject", &bigquery.DatasetMetadata{
+	bqMock.Create(ctx, defaultGCPProjectID, &bigquery.DatasetMetadata{
 		Name:         "test-set-exists",
 		Location:     "europe-north1",
 		CreationTime: time.Now(),
@@ -76,13 +75,12 @@ func TestBigqueryDatasetControllerAlreadyExistsInGCP(t *testing.T) {
 	dataset := naisv1.BigQueryDataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-set-exists",
-			Namespace: "default",
+			Namespace: defaultNamespace,
 		},
 		Spec: naisv1.BigQueryDatasetSpec{
 			Name:        "test-set-exists",
 			Description: "test description",
 			Location:    "europe-north1",
-			Project:     "gcpproject",
 		},
 	}
 
@@ -121,7 +119,7 @@ func TestBigqueryDatasetControllerUpdate(t *testing.T) {
 	dataset := naisv1.BigQueryDataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-set-update",
-			Namespace: "default",
+			Namespace: defaultNamespace,
 		},
 		Spec: naisv1.BigQueryDatasetSpec{
 			Name:        "test-dataset-update",
@@ -133,7 +131,6 @@ func TestBigqueryDatasetControllerUpdate(t *testing.T) {
 					UserByEmail: "test@helper.dev",
 				},
 			},
-			Project:         "gcpproject",
 			CascadingDelete: true,
 		},
 	}
@@ -176,7 +173,7 @@ func TestBigqueryDatasetControllerUpdate(t *testing.T) {
 		t.Fatal("Never got the updated dataset from k8s")
 	}
 
-	metadata, err := bqMock.Get(ctx, dataset.Spec.Project, dataset.Spec.Name)
+	metadata, err := bqMock.Get(ctx, defaultGCPProjectID, dataset.Spec.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +202,7 @@ func TestBigqueryDatasetControllerDelete(t *testing.T) {
 	dataset := naisv1.BigQueryDataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-set-delete",
-			Namespace: "default",
+			Namespace: defaultNamespace,
 		},
 		Spec: naisv1.BigQueryDatasetSpec{
 			Name:        "test-dataset-delete",
@@ -217,7 +214,6 @@ func TestBigqueryDatasetControllerDelete(t *testing.T) {
 					UserByEmail: "test@helper.dev",
 				},
 			},
-			Project:         "gcpproject",
 			CascadingDelete: true,
 		},
 	}
@@ -242,7 +238,7 @@ func TestBigqueryDatasetControllerDelete(t *testing.T) {
 	}
 
 	gotten = eventually(100*time.Millisecond, 10, func() bool {
-		return !bqMock.HasDataset(dataset.Spec.Project, dataset.Spec.Name)
+		return !bqMock.HasDataset(defaultGCPProjectID, dataset.Spec.Name)
 	})
 	if !gotten {
 		t.Fatalf("Failed delete dataset from state")
@@ -298,13 +294,12 @@ func TestBigqueryDatasetControllerCascadingDeleteOnlyChange(t *testing.T) {
 	dataset := naisv1.BigQueryDataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cascading-noop",
-			Namespace: "default",
+			Namespace: defaultNamespace,
 		},
 		Spec: naisv1.BigQueryDatasetSpec{
 			Name:            "test-cascading-noop-dataset",
 			Description:     "test description",
 			Location:        "europe-north1",
-			Project:         "gcpproject",
 			CascadingDelete: false,
 		},
 	}
