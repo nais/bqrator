@@ -115,12 +115,10 @@ func (r *BigQueryDatasetReconciler) createOrUpdate(ctx context.Context, dataset 
 		return err
 	}
 
-	dataset.Spec.Project = gcpProjectID
-
 	if dataset.Status.CreationTime == 0 {
-		return r.onCreate(ctx, dataset, currentHash)
+		return r.onCreate(ctx, dataset, gcpProjectID, currentHash)
 	} else if currentHash != dataset.Status.SynchronizationHash {
-		return r.onUpdate(ctx, dataset, currentHash)
+		return r.onUpdate(ctx, dataset, gcpProjectID, currentHash)
 	}
 
 	return nil
@@ -143,15 +141,15 @@ func (r *BigQueryDatasetReconciler) getProjectIDFromNamespace(ctx context.Contex
 	return projectID, nil
 }
 
-func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
+func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, projectID, hash string) error {
 	log := log.FromContext(ctx)
 
-	existing, err := r.bigqueryClient.Get(ctx, dataset.Spec.Project, dataset.Spec.Name)
+	existing, err := r.bigqueryClient.Get(ctx, projectID, dataset.Spec.Name)
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 404 {
 			log.Info("Dataset not found in GCP, recreating")
 			dataset.Status.CreationTime = 0
-			return r.onCreate(ctx, dataset, hash)
+			return r.onCreate(ctx, dataset, projectID, hash)
 		}
 		log.Error(err, "Unable to fetch existing dataset")
 		return err
@@ -189,7 +187,7 @@ func (r *BigQueryDatasetReconciler) onUpdate(ctx context.Context, dataset google
 	if metadataEqual(dataset, existing, access) {
 		log.Info("No-op update detected, skipping GCP update call")
 	} else {
-		err = r.bigqueryClient.Update(ctx, dataset.Spec.Project, dataset.Spec.Name, metadata, existing.ETag)
+		err = r.bigqueryClient.Update(ctx, projectID, dataset.Spec.Name, metadata, existing.ETag)
 		if err != nil {
 			log.Error(err, "unable to update dataset")
 			return err
@@ -331,7 +329,7 @@ func (r *BigQueryDatasetReconciler) onDelete(ctx context.Context, dataset google
 	return ctrl.Result{}, nil
 }
 
-func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, hash string) error {
+func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google_nais_io_v1.BigQueryDataset, projectID, hash string) error {
 	log := log.FromContext(ctx)
 
 	dataset.Status.CreationTime = int(time.Now().Unix())
@@ -354,7 +352,7 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google
 		labels["app"] = dataset.GetLabels()["app"]
 	}
 
-	err := r.bigqueryClient.Create(ctx, dataset.Spec.Project, &bigquery.DatasetMetadata{
+	err := r.bigqueryClient.Create(ctx, projectID, &bigquery.DatasetMetadata{
 		Name:        dataset.Spec.Name,
 		Location:    dataset.Spec.Location,
 		Description: dataset.Spec.Description,
@@ -364,7 +362,7 @@ func (r *BigQueryDatasetReconciler) onCreate(ctx context.Context, dataset google
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 409 {
 			log.Info("Dataset already exists")
-			return r.onUpdate(ctx, dataset, hash)
+			return r.onUpdate(ctx, dataset, projectID, hash)
 		}
 		log.Error(err, "unable to create dataset")
 		return err
