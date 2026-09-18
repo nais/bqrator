@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-deploy:
-    uses: nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@f5194f1a80156413b8b2febeae0b52ede1ab93b3 # ratchet:nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@main
+    uses: nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@5c203609f918d351959ca792314bd68dae207287 # ratchet:nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@main
     with:
       builds-chart: true
       deploys-to-fasit: true
