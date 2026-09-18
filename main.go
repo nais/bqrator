@@ -68,6 +68,8 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.JSONEncoder()))
 
+	setupLog.Info("Test av deploy via pr label")
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
