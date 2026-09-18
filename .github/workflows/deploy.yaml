@@ -14,6 +14,7 @@ permissions:
   id-token: write
 
 
+jobs:
   debug-event:
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +32,6 @@ permissions:
           echo "pr.labels    = $PR_LABELS"
           echo "contains     = $CONTAINS"
 
-jobs:
   build-deploy:
     uses: nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@cab1a52df3fd39edbc1ae0facaed8fa9b7ec690b # ratchet:nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@main
     with:
