@@ -13,27 +13,9 @@ permissions:
   contents: write
   id-token: write
 
-
 jobs:
-  debug-event:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dump label/event context
-        env:
-          EVENT_ACTION: ${{ github.event_name }}
-          ACTION: ${{ github.event.action }}
-          LABEL_NAME: ${{ github.event.label.name }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          CONTAINS: ${{ contains(github.event.pull_request.labels.*.name, 'deploy-dev-nais') }}
-        run: |
-          echo "event_name   = $EVENT_ACTION"
-          echo "action       = $ACTION"
-          echo "label.name   = $LABEL_NAME"
-          echo "pr.labels    = $PR_LABELS"
-          echo "contains     = $CONTAINS"
-
   build-deploy:
-    uses: nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@cab1a52df3fd39edbc1ae0facaed8fa9b7ec690b # ratchet:nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@main
+    uses: nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@aa4b3f170c7d73bc435f0176e99e7072814e87db # ratchet:nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@main
     with:
       builds-chart: true
       deploys-to-fasit: true
