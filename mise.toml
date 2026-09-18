@@ -62,7 +62,7 @@ run = "go vet ./..."
 
 [tasks."check:helm-lint"]
 description = "Lint helm chart"
-run = "helm lint --strict ./charts"
+run = "helm lint --strict ./charts/bqrator"
 
 [tasks."fmt"]
 description = "Format all code"
@@ -79,6 +79,10 @@ run = "go fix ./..."
 [tasks.test]
 description = "Run tests"
 run = 'KUBEBUILDER_ASSETS="$(pwd)/$(setup-envtest use $ENVTEST_K8S_VERSION --bin-dir bin -p path)" go test ./... -coverprofile cover.out'
+
+[tasks.build]
+description = "Compile-check the manager"
+run = "go build -o bin/manager main.go"
 
 [tasks."local:build"]
 description = "Build manager binary"

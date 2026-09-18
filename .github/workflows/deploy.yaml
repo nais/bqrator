@@ -6,79 +6,26 @@ on:
     paths-ignore:
       - "*.md"
       - "*.env"
-env:
-  NAME: bqrator
-  FEATURE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais/feature
-  CHART_PATH: "charts"
+  pull_request:
+    types: [opened, synchronize, labeled]
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-  build_and_push:
-    outputs:
-      version: ${{ steps.build_chart.outputs.version }}
-      name: ${{ steps.build_chart.outputs.name }}
-    permissions:
-      contents: "read"
-      id-token: "write"
-    name: build and push
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
-
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # ratchet:jdx/mise-action@v4
-
-      - run: mise run test
-      - run: mise run check
-
-      - run: git diff --exit-code --name-only
-
-      - uses: nais/platform-build-push-sign@df590279b21bc5978519685752f9eaddd546043c # ratchet:nais/platform-build-push-sign@main
-        id: build-push-sign
-        with:
-          name: ${{ env.NAME }}
-          google_service_account: gh-${{ env.NAME }}
-          workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
-          push: true
-
-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5
-        name: "Setup Helm"
-
-      - name: Build Chart
-        id: build_chart
-        run: |-
-          suffix="$(date +%Y%m%d%H%M%S)"
-          orig_version=$(yq '.version' < "${{ env.CHART_PATH}}/Chart.yaml")
-          new_version="${orig_version}-$suffix"
-
-          sed -i "s/^version: .*/version: $new_version/g" "${{ env.CHART_PATH}}/Chart.yaml"
-          yq e -i '.image.tag = "${{ steps.build-push-sign.outputs.version }}"' "${{ env.CHART_PATH}}/values.yaml"
-
-          helm dependency update "${{ env.CHART_PATH}}"
-          helm package "${{ env.CHART_PATH}}" --destination .
-
-          name=$(yq '.name' "${{ env.CHART_PATH}}/Chart.yaml")
-          echo "name=$name" >> $GITHUB_OUTPUT
-          echo "chart=$name-$new_version.tgz" >> $GITHUB_OUTPUT
-          echo "version=$new_version" >> $GITHUB_OUTPUT
-
-      - name: Push Chart
-        run: |-
-          chart="${{ steps.build_chart.outputs.chart }}"
-          echo "Pushing: $chart"
-          helm push "$chart" ${{ env.FEATURE_REPOSITORY }}
-
-  deploy:
-    needs:
-      - build_and_push
-    runs-on: fasit-deploy
-    permissions:
-      id-token: write
-    steps:
-      - uses: nais/fasit-deploy@53e433b1bdd08fc622e03a78584c0832c9083bd3 # ratchet:nais/fasit-deploy@v4.1.1
-        with:
-          chart: ${{ env.FEATURE_REPOSITORY }}/${{ needs.build_and_push.outputs.name }}
-          version: ${{ needs.build_and_push.outputs.version }}
-          targets: |
-            [
-              { "target": { "kind": "tenant", "tenant": "ci-nais" }, "wait": true },
-              { "target": { "kind": "tenant" } }
-            ]
+  build-deploy:
+    uses: nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@f5194f1a80156413b8b2febeae0b52ede1ab93b3 # ratchet:nais/actions/.github/workflows/mise-build-deploy-fasit.yaml@main
+    with:
+      builds-chart: true
+      deploys-to-fasit: true
+      targets: |
+        [
+          { "target": { "kind": "tenant", "tenant": "ci-nais" }, "wait": true },
+          { "target": { "kind": "tenant" } }
+        ]
+      deploy-pr-targets: |
+        [ { "target": { "kind": "tenant", "tenant": "dev-nais" } } ]
+      mise-tasks: '["test", "check"]'
+    secrets:
+      NAIS_IO_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
