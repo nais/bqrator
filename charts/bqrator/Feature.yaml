@@ -1,5 +1,8 @@
 environmentKinds:
   - "tenant"
+dependencies:
+  - allOf:
+      - fqdn-policy-crds
 
 values:
   gcpServiceAccount:
